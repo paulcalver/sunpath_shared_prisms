@@ -2,242 +2,239 @@ class Prism {
     constructor(x, y, rotation, ownerId, prismId) {
         this.x = x;
         this.y = y;
-        this.rotation = rotation; // degrees
+        this.rotation = rotation;
         this.ownerId = ownerId;
         this.prismId = prismId;
-        this.size = 60; // edge length in pixels
+        this.size = 20; // radius/edge factor
         this.isSelected = false;
 
-        // Refractive indices for spectrum
-        this.refractiveIndices = {
-            red: 1.513,
-            orange: 1.517,
-            yellow: 1.519,
-            green: 1.523,
-            blue: 1.528,
-            indigo: 1.532,
-            violet: 1.538
-        };
-
         this.spectrum = [
-            { name: 'red', hue: 0, n: this.refractiveIndices.red },
-            { name: 'orange', hue: 30, n: this.refractiveIndices.orange },
-            { name: 'yellow', hue: 60, n: this.refractiveIndices.yellow },
-            { name: 'green', hue: 120, n: this.refractiveIndices.green },
-            { name: 'blue', hue: 240, n: this.refractiveIndices.blue },
-            { name: 'indigo', hue: 260, n: this.refractiveIndices.indigo },
-            { name: 'violet', hue: 280, n: this.refractiveIndices.violet }
+            { name: 'red', hue: 0, n: 1.513 },
+            { name: 'orange', hue: 30, n: 1.517 },
+            { name: 'yellow', hue: 60, n: 1.519 },
+            { name: 'green', hue: 120, n: 1.523 },
+            { name: 'blue', hue: 240, n: 1.528 },
+            { name: 'indigo', hue: 260, n: 1.532 },
+            { name: 'violet', hue: 280, n: 1.538 }
         ];
     }
 
-    // Calculate the three vertices of the equilateral triangle
+    // HELPER: Keeps angles within -180 to 180 range
+    normalizeAngle(a) {
+        let ang = a % 360;
+        if (ang <= -180) ang += 360;
+        if (ang > 180) ang -= 360;
+        return ang;
+    }
+
     getVertices() {
         const vertices = [];
-        const angleOffset = this.rotation;
-
-        console.log('Prism rotation:', this.rotation);
-
-
-        // Equilateral triangle: three points 120 degrees apart
         for (let i = 0; i < 3; i++) {
-            const angle = angleOffset + (i * 120);
-            const x = this.x + cos(angle) * this.size;
-            const y = this.y + sin(angle) * this.size;
-            vertices.push(createVector(x, y));
+            const angle = this.rotation + (i * 120);
+            const vx = this.x + cos(angle) * this.size;
+            const vy = this.y + sin(angle) * this.size;
+            vertices.push(createVector(vx, vy));
         }
-
         return vertices;
     }
 
-    // Check if a point is inside the prism (for selection)
-    containsPoint(px, py) {
-        const vertices = this.getVertices();
-        const point = createVector(px, py);
-
-        // Use cross product method to check if point is inside triangle
-        let sign = null;
-        for (let i = 0; i < 3; i++) {
-            const v1 = vertices[i];
-            const v2 = vertices[(i + 1) % 3];
-
-            const edge = p5.Vector.sub(v2, v1);
-            const toPoint = p5.Vector.sub(point, v1);
-            const cross = edge.x * toPoint.y - edge.y * toPoint.x;
-
-            if (sign === null) {
-                sign = cross > 0;
-            } else if ((cross > 0) !== sign) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // Get the three face normals (perpendicular to each edge, pointing outward)
     getFaceNormals() {
         const vertices = this.getVertices();
         const normals = [];
         const center = createVector(this.x, this.y);
-
         for (let i = 0; i < 3; i++) {
             const v1 = vertices[i];
             const v2 = vertices[(i + 1) % 3];
-            const edge = p5.Vector.sub(v2, v1);
-
-            // Perpendicular (rotate 90 degrees clockwise)
-            let normal = createVector(edge.y, -edge.x).normalize();
-
-            // Edge midpoint
             const midpoint = p5.Vector.add(v1, v2).div(2);
-
-            // Vector from center to midpoint
-            const toMidpoint = p5.Vector.sub(midpoint, center);
-
-            // If normal points opposite to toMidpoint, flip it
-            if (normal.dot(toMidpoint) < 0) {
-                normal.mult(-1);
-            }
-
+            let normalVec = p5.Vector.sub(midpoint, center).normalize();
             normals.push({
-                normal: normal,
+                angle: normalVec.heading(), // Angle of the normal in p5 world space
                 edgeStart: v1,
                 edgeEnd: v2
             });
         }
-
         return normals;
     }
 
-// Calculate dispersion rays based on sun azimuth
-calculateDispersion(sunAzimuth) {
-  const rays = [];
-  
-  // Sun ray direction - light travels towards us from sun position
-  const sunDir = createVector(cos(sunAzimuth + 180), sin(sunAzimuth + 180)).normalize();
-  
-  const vertices = this.getVertices();
-  
-  // Find which edge faces the sun most directly
-  let entryEdgeIndex = -1;
-  let maxAlignment = -Infinity;
-  let entryNormal = null;
-  
-  for (let i = 0; i < 3; i++) {
-    const v1 = vertices[i];
-    const v2 = vertices[(i + 1) % 3];
-    const edgeMid = p5.Vector.add(v1, v2).div(2);
-    const edge = p5.Vector.sub(v2, v1);
-    
-    // Normal pointing outward
-    const normal = createVector(edge.y, -edge.x).normalize();
-    const toCenter = p5.Vector.sub(createVector(this.x, this.y), edgeMid);
-    if (normal.dot(toCenter) > 0) {
-      normal.mult(-1);
-    }
-    
-    // Check if sun hits this face
-    const alignment = sunDir.dot(normal);
-    if (alignment > maxAlignment) {
-      maxAlignment = alignment;
-      entryEdgeIndex = i;
-      entryNormal = normal;
-    }
-  }
-  
-  if (maxAlignment <= 0) return rays; // No face hit
-  
-  // Calculate angle of incidence (angle between sun ray and surface normal)
-  const incidentAngle = degrees(acos(maxAlignment));
-  
-  // Entry and exit points
-  const v1 = vertices[entryEdgeIndex];
-  const v2 = vertices[(entryEdgeIndex + 1) % 3];
-  const entryPoint = p5.Vector.add(v1, v2).div(2);
-  
-  // Exit edge is opposite
-  const exitEdgeIndex = (entryEdgeIndex + 2) % 3;
-  const v3 = vertices[exitEdgeIndex];
-  const v4 = vertices[(exitEdgeIndex + 1) % 3];
-  const exitPoint = p5.Vector.add(v3, v4).div(2);
-  
-  // Direction through prism
-  const throughAngle = atan2(exitPoint.y - entryPoint.y, exitPoint.x - entryPoint.x);
-  
-  // Each colour has different deviation based on refractive index
-  for (let colour of this.spectrum) {
-    const deviation = this.calculateDeviation(incidentAngle, colour.n);
-    const exitAngle = throughAngle + deviation;
-    
-    rays.push({
-      colour: colour,
-      direction: createVector(cos(exitAngle), sin(exitAngle)),
-      origin: exitPoint.copy()
-    });
-  }
-  
-  return rays;
-}
-
-    // Calculate deviation for given incident angle and refractive index
-    // Calculate deviation for given incident angle and refractive index
-calculateDeviation(incidentAngle, n) {
-  // Simplified: deviation increases with incident angle and refractive index
-  // Higher refractive index = more bending
-  // This is a linear approximation rather than full Snell's law
-  
-  const baseFactor = 0.3; // tuning parameter
-  const deviation = (n - 1.0) * incidentAngle * baseFactor;
-  
-  return deviation;
-}
-
-
-
-
-    // Update position and rotation
-    update(x, y, rotation) {
-        this.x = x;
-        this.y = y;
-        this.rotation = rotation;
+    getHitFace(sunAngle) {
+        const normals = this.getFaceNormals();
+        let bestFace = -1;
+        let minDiff = 180;
+        // Check the angle FROM the light source TO the prism (sunAngle)
+        for (let i = 0; i < normals.length; i++) {
+            // Difference between Sun's direction and where the face is pointing
+            let diff = abs(this.normalizeAngle(sunAngle - normals[i].angle));
+            if (diff < 90 && diff < minDiff) {
+                minDiff = diff;
+                bestFace = i;
+            }
+        }
+        return bestFace;
     }
 
-    // Display the prism
-    display() {
-        const vertices = this.getVertices();
+    // Find where a parallel ray (infinite distance source) intersects a line segment
+    findParallelRayIntersection(rayAngle, prismPoint, lineStart, lineEnd) {
+        // Ray direction (parallel rays all have same direction)
+        const r_dx = cos(rayAngle);
+        const r_dy = sin(rayAngle);
 
-        noStroke();
+        // Line segment direction
+        const s_dx = lineEnd.x - lineStart.x;
+        const s_dy = lineEnd.y - lineStart.y;
 
-        // Selected prisms are red, others white
-        if (this.isSelected) {
-            fill(0, 100, 100); // HSB: hue 0 (red), full saturation, full brightness
-        } else {
-            fill(0, 0, 100); // HSB: white
+        const denominator = (r_dx * s_dy - r_dy * s_dx);
+        if (abs(denominator) < 0.001) return null; // Parallel
+
+        // We want the intersection of:
+        // 1. A ray from prismPoint in direction (r_dx, r_dy)
+        // 2. The line segment from lineStart to lineEnd
+
+        const t = ((lineStart.x - prismPoint.x) * s_dy - (lineStart.y - prismPoint.y) * s_dx) / denominator;
+        const u = ((lineStart.x - prismPoint.x) * r_dy - (lineStart.y - prismPoint.y) * r_dx) / denominator;
+
+        // Check if intersection is on the line segment (0<=u<=1)
+        if (u >= 0 && u <= 1) {
+            return createVector(prismPoint.x + t * r_dx, prismPoint.y + t * r_dy);
+        }
+        return null;
+    }
+
+
+    // New method using geometric intersection tracing
+    calculateRefraction(sunAngle) {
+        let faceIndex = this.getHitFace(sunAngle);
+        if (faceIndex === -1) {
+            console.log('No face hit');
+            return null;
         }
 
+        const normals = this.getFaceNormals();
+        const entryFace = normals[faceIndex];
+
+        // --- 1. Find the exact entry point (parallel ray from sun hitting this face) ---
+        // We shoot a ray BACKWARDS from prism centre to find where it hits the entry face
+        const entryPoint = this.findParallelRayIntersection(
+            sunAngle + 180, // Shoot backwards to find entry
+            createVector(this.x, this.y),
+            entryFace.edgeStart,
+            entryFace.edgeEnd
+        );
+
+        if (!entryPoint) {
+            console.log('No entry point found');
+            return null;
+        }
+
+        // Rest of the method stays the same...
+        let i1 = this.normalizeAngle(sunAngle - entryFace.angle);
+        console.log('Entry angle i1:', i1.toFixed(1));
+        let results = [];
+
+        for (let ray of this.spectrum) {
+            let n = ray.n;
+
+            // Check for total internal reflection at entry
+            let sinValue = sin(i1) / n;
+            if (abs(sinValue) > 1) {
+                console.log('TIR at entry for', ray.name, 'sinValue:', sinValue);
+                continue;
+            }
+
+            let r1 = asin(sinValue);
+            let internalRayAngle = this.normalizeAngle(entryFace.angle + r1);
+
+            let exitPoint = null;
+            let exitFace = null;
+
+            for (let j = 0; j < 3; j++) {
+                if (j === faceIndex) continue;
+                const currentFace = normals[j];
+                const intersection = this.findParallelRayIntersection(
+                    internalRayAngle,
+                    entryPoint,
+                    currentFace.edgeStart,
+                    currentFace.edgeEnd
+                );
+
+                if (intersection) {
+                    exitPoint = intersection;
+                    exitFace = currentFace;
+                    break;
+                }
+            }
+
+            if (!exitPoint) {
+                console.log('No exit point for', ray.name);
+                continue;
+            }
+
+            let i2 = this.normalizeAngle(internalRayAngle - exitFace.angle);
+            let sinI2 = n * sin(i2);
+            if (abs(sinI2) > 1) {
+                console.log('TIR at exit for', ray.name);
+                continue;
+            }
+            let exitAngleLocal = asin(sinI2);
+            let exitWorldAngle = this.normalizeAngle(exitFace.angle + exitAngleLocal);
+
+            results.push({
+                hue: ray.hue,
+                angle: exitWorldAngle,
+                entryPt: entryPoint,
+                exitPt: exitPoint
+            });
+        }
+
+        console.log('Results count:', results.length);
+        return results;
+    }
+
+    drawOutline() {
+        const verts = this.getVertices();
+        noFill();
+        stroke(this.isSelected ? 200 : 70);
+        strokeWeight(this.isSelected ? 2 : 1);
         beginShape();
-        for (let v of vertices) {
-            vertex(v.x, v.y);
-        }
+        for (let v of verts) vertex(v.x, v.y);
         endShape(CLOSE);
     }
 
-    // Display dispersion rays
-    // Display dispersion rays
-    displayDispersion(sunAzimuth) {
-        const rays = this.calculateDispersion(sunAzimuth);
+    // Updated draw method needs sunSource coordinates
+    draw(sunAngle) {
+        angleMode(DEGREES);
+        this.drawOutline();
 
-        // Ray length to reach canvas edge
-        const rayLength = max(width, height) * 2;
+        let rays = this.calculateRefraction(sunAngle);
+        if (!rays) return;
 
-        strokeWeight(2);
+        push();
+        colorMode(HSB, 360, 100, 100, 100);
+        for (let r of rays) {
+            strokeWeight(2);
 
-        for (let ray of rays) {
-            stroke(ray.colour.hue, 100, 100);
-            const endX = ray.origin.x + ray.direction.x * rayLength;
-            const endY = ray.origin.y + ray.direction.y * rayLength;
-            line(ray.origin.x, ray.origin.y, endX, endY);
+            // Draw Internal Path
+            stroke(r.hue, 50, 100, 50);
+            line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
+
+            // Draw Emerging Path (The Rainbow)
+            stroke(r.hue, 80, 100, 100);
+            let beamX = r.exitPt.x + cos(r.angle) * 2000;
+            let beamY = r.exitPt.y + sin(r.angle) * 2000;
+            line(r.exitPt.x, r.exitPt.y, beamX, beamY);
         }
+        pop();
     }
 
-
+    containsPoint(px, py) {
+        const vertices = this.getVertices();
+        let sign = null;
+        for (let i = 0; i < 3; i++) {
+            const v1 = vertices[i];
+            const v2 = vertices[(i + 1) % 3];
+            const cross = (v2.x - v1.x) * (py - v1.y) - (v2.y - v1.y) * (px - v1.x);
+            if (sign === null) sign = cross > 0;
+            else if ((cross > 0) !== sign) return false;
+        }
+        return true;
+    }
 }

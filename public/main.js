@@ -110,29 +110,42 @@ function setup() {
   timeDisplay.style('pointer-events', 'none'); // Don't interfere with mouse events
   timeDisplay.style('line-height', '1.4'); // Add spacing between lines
 
+  testPrism = new Prism(width / 2, height / 2, 0, "owner", "p1");
 }
+
+
 
 
 function draw() {
   background(0);
 
   const now = new Date();
-  //now.setHours(12, 0, 0); // 12:00 noon
-
-  // Calculate current sun position for London
+  // For testing specific times, uncomment below:
+  // now.setHours(10, 0, 0); 
   const sunPos = getSunPosition(london.lat, london.lon, now);
   currentElevation = sunPos.elevation;
-  currentAzimuth = sunPos.azimuth;
 
-  // Display prism if it exists
+  console.log('Raw azimuth from getSunPosition:', sunPos.azimuth);
+  currentAzimuth = (sunPos.azimuth - 90 + 360) % 360;
+  console.log('Converted currentAzimuth for p5:', currentAzimuth);
+
+  keyHeld();
+
+
   if (testPrism) {
-    testPrism.displayDispersion(currentAzimuth);
-    testPrism.display();
+    if (currentElevation > 0) {
+      testPrism.draw(currentAzimuth);
+    } else {
+      testPrism.drawOutline();
+    }
   }
 
-  // Update the DOM display
+  // Draw the debug compass
+  //drawSunDebug(currentAzimuth, currentElevation);
+
   updateTimeDisplay();
 }
+
 
 function mousePressed() {
   // Check if clicking on existing prism
@@ -165,15 +178,21 @@ function mouseDragged() {
 
 function keyPressed() {
   if (selectedPrism) {
-    if (keyCode === LEFT_ARROW) {
-      selectedPrism.rotation -= 5;
-    }
-    if (keyCode === RIGHT_ARROW) {
-      selectedPrism.rotation += 5;
-    }
     if (keyCode === DELETE || keyCode === BACKSPACE) {
       testPrism = null;
       selectedPrism = null;
+    }
+  }
+}
+
+// Add this new function
+function keyHeld() {
+  if (selectedPrism) {
+    if (keyIsDown(LEFT_ARROW)) {
+      selectedPrism.rotation -= 1;
+    }
+    if (keyIsDown(RIGHT_ARROW)) {
+      selectedPrism.rotation += 1;
     }
   }
 }
@@ -222,5 +241,41 @@ function getSunPosition(lat, lon, date) {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+}
+
+function drawSunDebug(azimuth, elevation) {
+  push();
+  translate(width - 80, 80);
+
+  console.log('Drawing compass with azimuth:', azimuth);
+
+  // Draw Compass Face
+  stroke(100);
+  strokeWeight(1);
+  noFill();
+  circle(0, 0, 100);
+
+  // Cardinal Labels
+  fill(150);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  text("N", 0, -60);
+  text("E", 60, 0);
+  text("S", 0, 60);  // Add South label
+  text("W", -60, 0); // Add West label
+
+  // Draw Sun Vector
+  stroke(60, 100, 100);
+  strokeWeight(3);
+  let vX = cos(azimuth) * 45;
+  let vY = sin(azimuth) * 45;
+  console.log('Compass arrow pointing to:', vX.toFixed(1), vY.toFixed(1));
+  line(0, 0, vX, vY);
+  circle(vX, vY, 8);
+
+  // Elevation Text
+  fill(255);
+  text("Elev: " + elevation.toFixed(1) + "°", 0, 70);
+  pop();
 }
 

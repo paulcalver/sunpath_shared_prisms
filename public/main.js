@@ -4,9 +4,14 @@ let currentElevation;
 let currentAzimuth;
 let timeDisplay;
 
-// Test prism variables
-let testPrism = null;
-let selectedPrism = null;
+// Socket.IO variables
+let socket;
+let mySocketId = null;
+let allUserPrisms = {}; // Structure: { socketId: [prism, prism, prism] }
+
+// Multiple prisms variables
+let myPrisms = [null, null, null]; // Array for 3 prisms
+let selectedPrismIndex = null; // Which prism is selected
 
 // Define locations array with London
 const locations = [
@@ -64,8 +69,6 @@ function updateTimeDisplay() {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dateStr = `${months[sunTime.getMonth()]} ${sunTime.getDate()}, ${sunTime.getFullYear()}`;
 
-
-
   // Master line
   const masterLine = `${dateStr} | GMT ${hours}:${minutes}:${seconds}`;
 
@@ -101,98 +104,134 @@ function setup() {
   // Create DOM element for time display
   timeDisplay = createDiv('00:00:00');
   timeDisplay.style('position', 'fixed');
-  timeDisplay.style('bottom', '30px'); // Anchor to bottom
+  timeDisplay.style('bottom', '30px');
   timeDisplay.style('left', '30px');
   timeDisplay.style('color', '#464646');
   timeDisplay.style('font-family', 'monospace');
   timeDisplay.style('font-size', '12px');
   timeDisplay.style('z-index', '1000');
-  timeDisplay.style('pointer-events', 'none'); // Don't interfere with mouse events
-  timeDisplay.style('line-height', '1.4'); // Add spacing between lines
+  timeDisplay.style('pointer-events', 'none');
+  timeDisplay.style('line-height', '1.4');
 
-  testPrism = new Prism(width / 2, height / 2, 0, "owner", "p1");
+  // Initialize Socket.IO
+  initSocket();
 }
-
-
-
 
 function draw() {
   background(0);
 
   const now = new Date();
-  // For testing specific times, uncomment below:
-  // now.setHours(10, 0, 0); 
   const sunPos = getSunPosition(london.lat, london.lon, now);
   currentElevation = sunPos.elevation;
-
-  console.log('Raw azimuth from getSunPosition:', sunPos.azimuth);
   currentAzimuth = (sunPos.azimuth - 90 + 360) % 360;
-  console.log('Converted currentAzimuth for p5:', currentAzimuth);
 
+  // Check for held keys every frame
   keyHeld();
 
-
-  if (testPrism) {
-    if (currentElevation > 0) {
-      testPrism.draw(currentAzimuth);
-    } else {
-      testPrism.drawOutline();
+  // Draw all other users' prisms
+  for (let userId in allUserPrisms) {
+    for (let i = 0; i < 3; i++) {
+      if (allUserPrisms[userId][i]) {
+        if (currentElevation > 0) {
+          allUserPrisms[userId][i].draw(currentAzimuth);
+        } else {
+          allUserPrisms[userId][i].drawOutline();
+        }
+      }
     }
   }
 
-  // Draw the debug compass
-  //drawSunDebug(currentAzimuth, currentElevation);
+  // Draw my prisms on top
+  for (let i = 0; i < 3; i++) {
+    if (myPrisms[i]) {
+      if (currentElevation > 0) {
+        myPrisms[i].draw(currentAzimuth);
+      } else {
+        myPrisms[i].drawOutline();
+      }
+    }
+  }
 
   updateTimeDisplay();
 }
 
-
 function mousePressed() {
-  // Check if clicking on existing prism
-  if (testPrism && testPrism.containsPoint(mouseX, mouseY)) {
-    selectedPrism = testPrism;
-    testPrism.isSelected = true;
-    return;
+  // Check if clicking on any existing prism
+  for (let i = 0; i < 3; i++) {
+    if (myPrisms[i] && myPrisms[i].containsPoint(mouseX, mouseY)) {
+      // Deselect previously selected prism
+      if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+        myPrisms[selectedPrismIndex].isSelected = false;
+      }
+      // Select this prism
+      selectedPrismIndex = i;
+      myPrisms[i].isSelected = true;
+      return;
+    }
   }
 
-  // Click empty space - deselect
-  if (testPrism) {
-    testPrism.isSelected = false;
-    selectedPrism = null;
+  // Click on empty space - deselect all
+  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+    myPrisms[selectedPrismIndex].isSelected = false;
+    selectedPrismIndex = null;
   }
 
-  // Place new prism if none exists
-  if (!testPrism) {
-    testPrism = new Prism(mouseX, mouseY, 0, 'test-user', 0);
-    selectedPrism = testPrism;
-    testPrism.isSelected = true;
+  // Place new prism in first empty slot
+  for (let i = 0; i < 3; i++) {
+    if (myPrisms[i] === null) {
+      myPrisms[i] = new Prism(mouseX, mouseY, 0, mySocketId || 'temp-id', i);
+      // Deselect previous
+      if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+        myPrisms[selectedPrismIndex].isSelected = false;
+      }
+      // Select new prism
+      selectedPrismIndex = i;
+      myPrisms[i].isSelected = true;
+      
+      // Emit to server
+      emitPrismUpdate(i);
+      break;
+    }
   }
 }
 
 function mouseDragged() {
-  if (selectedPrism) {
-    selectedPrism.x = mouseX;
-    selectedPrism.y = mouseY;
+  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+    myPrisms[selectedPrismIndex].x = mouseX;
+    myPrisms[selectedPrismIndex].y = mouseY;
+    
+    // Emit to server
+    emitPrismUpdate(selectedPrismIndex);
   }
 }
 
 function keyPressed() {
-  if (selectedPrism) {
+  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     if (keyCode === DELETE || keyCode === BACKSPACE) {
-      testPrism = null;
-      selectedPrism = null;
+      emitPrismDelete(selectedPrismIndex);
+      myPrisms[selectedPrismIndex] = null;
+      selectedPrismIndex = null;
     }
   }
 }
 
-// Add this new function
+// Check for held keys
 function keyHeld() {
-  if (selectedPrism) {
+  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+    let rotationChanged = false;
+    
     if (keyIsDown(LEFT_ARROW)) {
-      selectedPrism.rotation -= 1;
+      myPrisms[selectedPrismIndex].rotation -= 1;
+      rotationChanged = true;
     }
     if (keyIsDown(RIGHT_ARROW)) {
-      selectedPrism.rotation += 1;
+      myPrisms[selectedPrismIndex].rotation += 1;
+      rotationChanged = true;
+    }
+    
+    // Emit rotation updates (throttled by frame rate)
+    if (rotationChanged) {
+      emitPrismUpdate(selectedPrismIndex);
     }
   }
 }
@@ -243,39 +282,105 @@ function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
-function drawSunDebug(azimuth, elevation) {
-  push();
-  translate(width - 80, 80);
+function initSocket() {
+  // Connect to server (adjust URL for production)
+  socket = io();
 
-  console.log('Drawing compass with azimuth:', azimuth);
+  socket.on('connect', () => {
+    console.log('Connected to server:', socket.id);
+    mySocketId = socket.id;
+  });
 
-  // Draw Compass Face
-  stroke(100);
-  strokeWeight(1);
-  noFill();
-  circle(0, 0, 100);
+  // Receive initial state of all users' prisms
+  socket.on('init-state', (allUsers) => {
+    console.log('Received init state:', allUsers);
 
-  // Cardinal Labels
-  fill(150);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  text("N", 0, -60);
-  text("E", 60, 0);
-  text("S", 0, 60);  // Add South label
-  text("W", -60, 0); // Add West label
+    // Convert server data to Prism objects
+    for (let userId in allUsers) {
+      if (userId === mySocketId) continue; // Skip our own prisms
 
-  // Draw Sun Vector
-  stroke(60, 100, 100);
-  strokeWeight(3);
-  let vX = cos(azimuth) * 45;
-  let vY = sin(azimuth) * 45;
-  console.log('Compass arrow pointing to:', vX.toFixed(1), vY.toFixed(1));
-  line(0, 0, vX, vY);
-  circle(vX, vY, 8);
+      allUserPrisms[userId] = [];
+      for (let prismData of allUsers[userId].prisms) {
+        if (prismData.x !== null && prismData.y !== null) {
+          allUserPrisms[userId].push(
+            new Prism(prismData.x, prismData.y, prismData.rotation, userId, prismData.id)
+          );
+        } else {
+          allUserPrisms[userId].push(null);
+        }
+      }
+    }
+  });
 
-  // Elevation Text
-  fill(255);
-  text("Elev: " + elevation.toFixed(1) + "°", 0, 70);
-  pop();
+  // New user joined
+  socket.on('user-joined', (data) => {
+    console.log('User joined:', data.userId);
+    allUserPrisms[data.userId] = [];
+    for (let prismData of data.prisms) {
+      if (prismData.x !== null && prismData.y !== null) {
+        allUserPrisms[data.userId].push(
+          new Prism(prismData.x, prismData.y, prismData.rotation, data.userId, prismData.id)
+        );
+      } else {
+        allUserPrisms[data.userId].push(null);
+      }
+    }
+  });
+
+  // Another user's prism was updated
+  socket.on('prism-updated', (data) => {
+    console.log('Prism updated:', data);
+
+    if (!allUserPrisms[data.userId]) {
+      allUserPrisms[data.userId] = [null, null, null];
+    }
+
+    const prismIndex = data.prismId;
+
+    if (data.x === null || data.y === null) {
+      // Prism was deleted
+      allUserPrisms[data.userId][prismIndex] = null;
+    } else {
+      // Prism was created or updated
+      if (allUserPrisms[data.userId][prismIndex]) {
+        // Update existing prism
+        allUserPrisms[data.userId][prismIndex].update(data.x, data.y, data.rotation);
+      } else {
+        // Create new prism
+        allUserPrisms[data.userId][prismIndex] =
+          new Prism(data.x, data.y, data.rotation, data.userId, prismIndex);
+      }
+    }
+  });
+
+  // User disconnected
+  socket.on('user-disconnected', (userId) => {
+    console.log('User disconnected:', userId);
+    // Keep their prisms visible (persistent)
+  });
 }
 
+// Emit prism update to server
+function emitPrismUpdate(prismIndex) {
+  if (!socket || !myPrisms[prismIndex]) return;
+
+  const prism = myPrisms[prismIndex];
+  socket.emit('prism-update', {
+    prismId: prismIndex,
+    x: prism.x,
+    y: prism.y,
+    rotation: prism.rotation
+  });
+}
+
+// Emit prism deletion to server
+function emitPrismDelete(prismIndex) {
+  if (!socket) return;
+
+  socket.emit('prism-update', {
+    prismId: prismIndex,
+    x: null,
+    y: null,
+    rotation: 0
+  });
+}

@@ -5,7 +5,7 @@ class Prism {
         this.rotation = rotation;
         this.ownerId = ownerId;
         this.prismId = prismId;
-        this.size = 20; // radius/edge factor
+        this.size = 50; // radius/edge factor
         this.isSelected = false;
 
         this.spectrum = [

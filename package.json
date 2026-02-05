@@ -1,18 +1,17 @@
 {
-  "name": "networked-app",
+  "name": "prism-refraction",
   "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
-  "type": "module", 
+  "description": "Networked prism refraction visualization",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node app.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "express": "^5.2.1",
-    "socket.io": "^4.8.3",
-    "open": "^11.0.0"
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
   }
 }

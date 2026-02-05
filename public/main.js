@@ -30,6 +30,9 @@ let citySearchResults = [];
 let selectedCity = null;
 let modalJustClosed = false; // Flag to prevent modal from reopening immediately
 
+// UI state
+let showLabels = true; // Toggle for showing/hiding prism labels
+
 // Define locations array
 const locations = [
   { id: 'london', name: 'London, UK', lat: 51.5074, lon: -0.1278, enabled: true, keyNumber: 1 },
@@ -159,7 +162,9 @@ function draw() {
           prism.drawOutline(mySocketId);
         }
 
-        prism.drawLabel();
+        if (showLabels) {
+          prism.drawLabel();
+        }
       }
     }
   }
@@ -185,7 +190,9 @@ function draw() {
         prism.drawOutline(mySocketId);
       }
 
-      prism.drawLabel();
+      if (showLabels) {
+        prism.drawLabel();
+      }
     }
   }
 
@@ -227,9 +234,6 @@ function mousePressed() {
     myPrisms[selectedPrismIndex].isSelected = false;
     selectedPrismIndex = null;
   }
-
-  // Show modal to create new prism
-  showPrismModal(mouseX, mouseY);
 }
 
 function mouseDragged() {
@@ -605,7 +609,7 @@ function createTimeControls() {
     const btn = createButton(speed.label);
     btn.parent(controlsDiv);
     btn.style('padding', '3px 12px');
-    btn.style('background', speed.value === timeSpeed ? '#8b8b00' : '#333');
+    btn.style('background', speed.value === timeSpeed ? '#4a7c4a' : '#333');
     btn.style('color', '#fff');
     btn.style('border', 'none');
     btn.style('border-radius', '3px');
@@ -617,7 +621,7 @@ function createTimeControls() {
       timeSpeed = speed.value;
       // Update all button styles
       speedButtons.forEach((button, i) => {
-        button.style('background', speeds[i].value === timeSpeed ? '#8b8b00' : '#333');
+        button.style('background', speeds[i].value === timeSpeed ? '#4a7c4a' : '#333');
       });
       return false; // Prevent event propagation to canvas
     });
@@ -642,7 +646,7 @@ function createTimeControls() {
     timeSpeed = 1;
     // Update button styles to reflect 1x speed
     speedButtons.forEach((button, i) => {
-      button.style('background', speeds[i].value === timeSpeed ? '#8b8b00' : '#333');
+      button.style('background', speeds[i].value === timeSpeed ? '#4a7c4a' : '#333');
     });
     return false; // Prevent event propagation to canvas
   });
@@ -662,6 +666,25 @@ function createTimeControls() {
   newPrismBtn.mousePressed(() => {
     // Open modal at center of screen
     showPrismModal(width / 2, height / 2);
+    return false;
+  });
+
+  // Toggle Labels button
+  const toggleLabelsBtn = createButton(showLabels ? 'Hide Labels' : 'Show Labels');
+  toggleLabelsBtn.parent(controlsDiv);
+  toggleLabelsBtn.id('toggle-labels-btn');
+  toggleLabelsBtn.style('padding', '3px 12px');
+  toggleLabelsBtn.style('background', '#333');
+  toggleLabelsBtn.style('color', '#fff');
+  toggleLabelsBtn.style('border', 'none');
+  toggleLabelsBtn.style('border-radius', '3px');
+  toggleLabelsBtn.style('cursor', 'pointer');
+  toggleLabelsBtn.style('font-family', 'monospace');
+  toggleLabelsBtn.style('font-size', '11px');
+
+  toggleLabelsBtn.mousePressed(() => {
+    showLabels = !showLabels;
+    toggleLabelsBtn.html(showLabels ? 'Hide Labels' : 'Show Labels');
     return false;
   });
 }

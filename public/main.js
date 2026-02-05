@@ -4,14 +4,18 @@ let currentElevation;
 let currentAzimuth;
 let timeDisplay;
 
+// Test prism variables
+let testPrism = null;
+let selectedPrism = null;
+
 // Define locations array with London
 const locations = [
-  { 
-    name: 'London', 
-    lat: london.lat, 
-    lon: london.lon, 
-    keyNumber: 1, 
-    enabled: true 
+  {
+    name: 'London',
+    lat: london.lat,
+    lon: london.lon,
+    keyNumber: 1,
+    enabled: true
   }
 ];
 
@@ -60,7 +64,7 @@ function updateTimeDisplay() {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dateStr = `${months[sunTime.getMonth()]} ${sunTime.getDate()}, ${sunTime.getFullYear()}`;
 
-  
+
 
   // Master line
   const masterLine = `${dateStr} | GMT ${hours}:${minutes}:${seconds}`;
@@ -92,7 +96,6 @@ function updateTimeDisplay() {
 function setup() {
   createCanvas(windowWidth, windowHeight);
   angleMode(DEGREES);
-  noStroke();
   colorMode(HSB, 360, 100, 100, 100);
 
   // Create DOM element for time display
@@ -121,11 +124,59 @@ function draw() {
   currentElevation = sunPos.elevation;
   currentAzimuth = sunPos.azimuth;
 
+  // Display prism if it exists
+  if (testPrism) {
+    testPrism.displayDispersion(currentAzimuth);
+    testPrism.display();
+  }
+
   // Update the DOM display
   updateTimeDisplay();
 }
 
+function mousePressed() {
+  // Check if clicking on existing prism
+  if (testPrism && testPrism.containsPoint(mouseX, mouseY)) {
+    selectedPrism = testPrism;
+    testPrism.isSelected = true;
+    return;
+  }
 
+  // Click empty space - deselect
+  if (testPrism) {
+    testPrism.isSelected = false;
+    selectedPrism = null;
+  }
+
+  // Place new prism if none exists
+  if (!testPrism) {
+    testPrism = new Prism(mouseX, mouseY, 0, 'test-user', 0);
+    selectedPrism = testPrism;
+    testPrism.isSelected = true;
+  }
+}
+
+function mouseDragged() {
+  if (selectedPrism) {
+    selectedPrism.x = mouseX;
+    selectedPrism.y = mouseY;
+  }
+}
+
+function keyPressed() {
+  if (selectedPrism) {
+    if (keyCode === LEFT_ARROW) {
+      selectedPrism.rotation -= 5;
+    }
+    if (keyCode === RIGHT_ARROW) {
+      selectedPrism.rotation += 5;
+    }
+    if (keyCode === DELETE || keyCode === BACKSPACE) {
+      testPrism = null;
+      selectedPrism = null;
+    }
+  }
+}
 
 function getSunPosition(lat, lon, date) {
   const rad = Math.PI / 180;
@@ -172,3 +223,4 @@ function getSunPosition(lat, lon, date) {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
+

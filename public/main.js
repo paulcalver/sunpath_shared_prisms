@@ -3,6 +3,7 @@ const london = { lat: 51.5074, lon: -0.1278 };
 let currentElevation;
 let currentAzimuth;
 let timeDisplay;
+let currentTime; // Shared time for both display and sun calculations
 
 // Socket.IO variables
 let socket;
@@ -24,9 +25,9 @@ const locations = [
   }
 ];
 
-// Return current real-time
+// Return current time (real or overridden)
 function getAnimatedTime() {
-  return new Date();
+  return currentTime || new Date();
 }
 
 function getSunriseSunset(lat, lon, date) {
@@ -119,9 +120,11 @@ function setup() {
 
 function draw() {
   background(0);
+  
+  currentTime = new Date();
+  currentTime.setHours(10, 0, 0);
 
-  const now = new Date();
-  const sunPos = getSunPosition(london.lat, london.lon, now);
+  const sunPos = getSunPosition(london.lat, london.lon, currentTime);
   currentElevation = sunPos.elevation;
   currentAzimuth = (sunPos.azimuth - 90 + 360) % 360;
 
@@ -133,7 +136,7 @@ function draw() {
     for (let i = 0; i < 3; i++) {
       if (allUserPrisms[userId][i]) {
         if (currentElevation > 0) {
-          allUserPrisms[userId][i].draw(currentAzimuth);
+          allUserPrisms[userId][i].draw(currentAzimuth, currentElevation);
         } else {
           allUserPrisms[userId][i].drawOutline();
         }
@@ -141,11 +144,11 @@ function draw() {
     }
   }
 
-  // Draw my prisms on top
+  // Draw my prisms
   for (let i = 0; i < 3; i++) {
     if (myPrisms[i]) {
       if (currentElevation > 0) {
-        myPrisms[i].draw(currentAzimuth);
+        myPrisms[i].draw(currentAzimuth, currentElevation);
       } else {
         myPrisms[i].drawOutline();
       }
@@ -187,7 +190,7 @@ function mousePressed() {
       // Select new prism
       selectedPrismIndex = i;
       myPrisms[i].isSelected = true;
-      
+
       // Emit to server
       emitPrismUpdate(i);
       break;
@@ -199,7 +202,7 @@ function mouseDragged() {
   if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     myPrisms[selectedPrismIndex].x = mouseX;
     myPrisms[selectedPrismIndex].y = mouseY;
-    
+
     // Emit to server
     emitPrismUpdate(selectedPrismIndex);
   }
@@ -219,7 +222,7 @@ function keyPressed() {
 function keyHeld() {
   if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     let rotationChanged = false;
-    
+
     if (keyIsDown(LEFT_ARROW)) {
       myPrisms[selectedPrismIndex].rotation -= 1;
       rotationChanged = true;
@@ -228,7 +231,7 @@ function keyHeld() {
       myPrisms[selectedPrismIndex].rotation += 1;
       rotationChanged = true;
     }
-    
+
     // Emit rotation updates (throttled by frame rate)
     if (rotationChanged) {
       emitPrismUpdate(selectedPrismIndex);
@@ -309,6 +312,13 @@ function initSocket() {
           allUserPrisms[userId].push(null);
         }
       }
+      // User's prisms expired due to inactivity
+      socket.on('user-expired', (userId) => {
+        console.log('User prisms expired:', userId);
+        if (allUserPrisms[userId]) {
+          delete allUserPrisms[userId];
+        }
+      });
     }
   });
 

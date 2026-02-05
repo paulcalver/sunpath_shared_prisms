@@ -200,30 +200,52 @@ class Prism {
     }
 
     // Updated draw method needs sunSource coordinates
-    draw(sunAngle) {
-        angleMode(DEGREES);
-        this.drawOutline();
+draw(sunAngle, sunElevation) {
+    angleMode(DEGREES);
+    this.drawOutline();
 
-        let rays = this.calculateRefraction(sunAngle);
-        if (!rays) return;
+    let rays = this.calculateRefraction(sunAngle);
+    if (!rays) return;
 
-        push();
-        colorMode(HSB, 360, 100, 100, 100);
-        for (let r of rays) {
-            strokeWeight(2);
-
-            // Draw Internal Path
-            stroke(r.hue, 50, 100, 50);
-            line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
-
-            // Draw Emerging Path (The Rainbow)
-            stroke(r.hue, 80, 100, 100);
-            let beamX = r.exitPt.x + cos(r.angle) * 2000;
-            let beamY = r.exitPt.y + sin(r.angle) * 2000;
-            line(r.exitPt.x, r.exitPt.y, beamX, beamY);
-        }
-        pop();
+    // Calculate ray length based on elevation
+    // Scale factor to make it look good on screen
+    const maxRayLength = max(width, height) * 1; // Reach across entire canvas at low angles
+    const minRayLength = 100; // Minimum visible length
+    
+    let rayLength;
+    
+    if (sunElevation < 0.5) {
+        // Sun below horizon or just at it - maximum length
+        rayLength = maxRayLength;
+    } else if (sunElevation > 80) {
+        // Nearly overhead - minimum length
+        rayLength = minRayLength;
+    } else {
+        // Inverse relationship: lower elevation = longer rays
+        // Map elevation 0.5° to 80° onto ray length maxRayLength to minRayLength
+        rayLength = map(sunElevation, 0.5, 80, maxRayLength, minRayLength);
     }
+
+    push();
+    colorMode(HSB, 360, 100, 100, 100);
+    for (let r of rays) {
+        strokeWeight(2);
+
+        // Draw Internal Path
+        stroke(r.hue, 50, 100, 50);
+        line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
+
+        // Draw Emerging Path with elevation-based length
+        blendMode(ADD);
+        strokeWeight(5);
+        stroke(r.hue, 80, 100, 100);
+        let beamX = r.exitPt.x + cos(r.angle) * rayLength;
+        let beamY = r.exitPt.y + sin(r.angle) * rayLength;
+        line(r.exitPt.x, r.exitPt.y, beamX, beamY);
+        
+    }
+    pop();
+}
 
     containsPoint(px, py) {
         const vertices = this.getVertices();
@@ -236,5 +258,12 @@ class Prism {
             else if ((cross > 0) !== sign) return false;
         }
         return true;
+    }
+
+    // Add this method to the Prism class
+    update(x, y, rotation) {
+        this.x = x;
+        this.y = y;
+        this.rotation = rotation;
     }
 }

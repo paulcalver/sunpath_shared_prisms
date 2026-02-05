@@ -1,33 +1,61 @@
-const london = { lat: 51.5074, lon: -0.1278 };
+// Configuration
+const MAX_PRISMS = 8; // Maximum number of prisms per user
 
 let currentElevation;
 let currentAzimuth;
 let timeDisplay;
-let currentTime; // Shared time for both display and sun calculations
+let timeSpeed = 3600; // 1 = real time, 60 = 1 minute per second, etc.
+let timeOffset = 0; // accumulated time offset in milliseconds
 
 // Socket.IO variables
 let socket;
 let mySocketId = null;
-let allUserPrisms = {}; // Structure: { socketId: [prism, prism, prism] }
+let allUserPrisms = {}; // Structure: { socketId: { prisms: [...], locationIndex: number } }
 
 // Multiple prisms variables
-let myPrisms = [null, null, null]; // Array for 3 prisms
+let myPrisms = Array(MAX_PRISMS).fill(null); // Array for prisms
 let selectedPrismIndex = null; // Which prism is selected
 
-// Define locations array with London
+// My chosen location
+let myLocation = 0; // Default to first location (London)
+
+// Throttle for rotation updates
+let lastRotationEmit = 0;
+const ROTATION_EMIT_INTERVAL = 50; // milliseconds (20 updates per second)
+
+// Modal dialog for creating prisms
+let prismModal = null;
+let pendingPrismPosition = null; // {x, y} for where to place the prism
+let citySearchResults = [];
+let selectedCity = null;
+let modalJustClosed = false; // Flag to prevent modal from reopening immediately
+
+// Define locations array
 const locations = [
-  {
-    name: 'London',
-    lat: london.lat,
-    lon: london.lon,
-    keyNumber: 1,
-    enabled: true
-  }
+  { id: 'london', name: 'London, UK', lat: 51.5074, lon: -0.1278, enabled: true, keyNumber: 1 },
+  { id: 'marrakesh', name: 'Marrakesh, Morocco', lat: 31.6295, lon: -7.9811, enabled: true, keyNumber: 2 },
+  { id: 'newyork', name: 'New York', lat: 40.7128, lon: -74.0060, enabled: true, keyNumber: 3 },
+  { id: 'lisbon', name: 'Lisbon', lat: 38.7223, lon: -9.1393, enabled: true, keyNumber: 4 },
+  { id: 'cairo', name: 'Cairo', lat: 30.0444, lon: 31.2357, enabled: true, keyNumber: 5 },
+  { id: 'dubai', name: 'Dubai', lat: 25.2048, lon: 55.2708, enabled: true, keyNumber: 6 },
+  { id: 'delhi', name: 'Delhi', lat: 28.6139, lon: 77.2090, enabled: true, keyNumber: 7 },
+  { id: 'dhaka', name: 'Dhaka', lat: 23.8103, lon: 90.4125, enabled: true, keyNumber: 8 },
+  { id: 'hanoi', name: 'Hanoi', lat: 21.0285, lon: 105.8542, enabled: true, keyNumber: 9 }
 ];
 
-// Return current time (real or overridden)
+// Return current animated time
 function getAnimatedTime() {
-  return currentTime || new Date();
+  const now = new Date();
+  return new Date(now.getTime() + timeOffset);
+}
+
+// Update time offset based on speed
+function updateTime() {
+  if (timeSpeed !== 1) {
+    // Add (timeSpeed - 1) seconds worth of time per frame
+    // At 60fps, each frame is ~16.67ms
+    timeOffset += (timeSpeed - 1) * (1000 / 60);
+  }
 }
 
 function getSunriseSunset(lat, lon, date) {
@@ -50,7 +78,7 @@ function getSunriseSunset(lat, lon, date) {
     // Found sunset (sun crosses horizon going down, after sunrise)
     if (sunrise !== null && sunset === null && sunPos.elevation < 0) {
       sunset = new Date(testDate);
-      sunset.setMinutes(sunset.getMinutes() - 1); // Go back to last positive elevation
+      sunset.setMinutes(sunset.getMinutes() - 1);
       break;
     }
   }
@@ -58,44 +86,20 @@ function getSunriseSunset(lat, lon, date) {
   return { sunrise, sunset };
 }
 
-
-// Update the DOM time display with date, location, wall bearing, and time
+// Update the DOM time display
 function updateTimeDisplay() {
   const sunTime = getAnimatedTime();
   const hours = String(sunTime.getHours()).padStart(2, '0');
   const minutes = String(sunTime.getMinutes()).padStart(2, '0');
   const seconds = String(sunTime.getSeconds()).padStart(2, '0');
 
-  // Format date (e.g., "Jan 14, 2026")
+  // Format date
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dateStr = `${months[sunTime.getMonth()]} ${sunTime.getDate()}, ${sunTime.getFullYear()}`;
 
-  // Master line
-  const masterLine = `${dateStr} | GMT ${hours}:${minutes}:${seconds}`;
-
-  // Build location lines for all enabled locations
-  const enabledLocations = locations.filter(loc => loc.enabled);
-  const locationLines = enabledLocations.map(location => {
-    const sunPos = getSunPosition(location.lat, location.lon, sunTime);
-    const elevStr = sunPos.elevation.toFixed(1);
-    const azStr = sunPos.azimuth.toFixed(1);
-
-    // Check if sun is at horizon (sunrise/sunset) - within 2 degrees of horizon
-    const isAtHorizon = sunPos.elevation >= 0 && sunPos.elevation <= 2;
-
-    // Color the line yellow if at sunrise/sunset
-    if (isAtHorizon) {
-      return `<span style="color: #FFD700;">[${location.keyNumber}] ${location.name} | Elevation: ${elevStr}° | Azimuth: ${azStr}°</span>`;
-    } else {
-      return `${location.name} | Elevation: ${elevStr}° | Azimuth: ${azStr}°`;
-    }
-  });
-
-  // Combine all lines with HTML line breaks
-  const displayText = [masterLine, ...locationLines].join('<br>');
+  const displayText = `${dateStr} | GMT ${hours}:${minutes}:${seconds}`;
   timeDisplay.html(displayText);
 }
-
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -105,7 +109,7 @@ function setup() {
   // Create DOM element for time display
   timeDisplay = createDiv('00:00:00');
   timeDisplay.style('position', 'fixed');
-  timeDisplay.style('bottom', '30px');
+  timeDisplay.style('bottom', '35px');
   timeDisplay.style('left', '30px');
   timeDisplay.style('color', '#464646');
   timeDisplay.style('font-family', 'monospace');
@@ -114,44 +118,74 @@ function setup() {
   timeDisplay.style('pointer-events', 'none');
   timeDisplay.style('line-height', '1.4');
 
+  // Create time and location controls
+  createTimeControls();
+
+  // Create prism creation modal
+  createPrismModal();
+
   // Initialize Socket.IO
   initSocket();
 }
 
 function draw() {
   background(0);
-  
-  currentTime = new Date();
-  currentTime.setHours(10, 0, 0);
 
-  const sunPos = getSunPosition(london.lat, london.lon, currentTime);
-  currentElevation = sunPos.elevation;
-  currentAzimuth = (sunPos.azimuth - 90 + 360) % 360;
+  updateTime();
+  const now = getAnimatedTime();
 
   // Check for held keys every frame
-  keyHeld();
+  //keyHeld();
 
-  // Draw all other users' prisms
+  // Draw all other users' prisms with EACH prism's city sun position
   for (let userId in allUserPrisms) {
-    for (let i = 0; i < 3; i++) {
-      if (allUserPrisms[userId][i]) {
-        if (currentElevation > 0) {
-          allUserPrisms[userId][i].draw(currentAzimuth, currentElevation);
+    for (let i = 0; i < MAX_PRISMS; i++) {
+      if (allUserPrisms[userId].prisms[i]) {
+        const prism = allUserPrisms[userId].prisms[i];
+
+        // Use prism's own city coordinates for sun position
+        if (prism.cityLat && prism.cityLon) {
+          const sunPos = getSunPosition(prism.cityLat, prism.cityLon, now);
+          const elevation = sunPos.elevation;
+          const azimuth = (sunPos.azimuth - 90 + 360) % 360;
+
+          if (elevation > 0) {
+            prism.draw(azimuth, elevation);
+          } else {
+            prism.drawOutline(mySocketId);
+          }
         } else {
-          allUserPrisms[userId][i].drawOutline();
+          // No city set, just draw outline
+          prism.drawOutline(mySocketId);
         }
+
+        prism.drawLabel();
       }
     }
   }
 
-  // Draw my prisms
-  for (let i = 0; i < 3; i++) {
+  // Draw my prisms with EACH prism's city sun position
+  for (let i = 0; i < MAX_PRISMS; i++) {
     if (myPrisms[i]) {
-      if (currentElevation > 0) {
-        myPrisms[i].draw(currentAzimuth, currentElevation);
+      const prism = myPrisms[i];
+
+      // Use prism's own city coordinates for sun position
+      if (prism.cityLat && prism.cityLon) {
+        const sunPos = getSunPosition(prism.cityLat, prism.cityLon, now);
+        currentElevation = sunPos.elevation;
+        currentAzimuth = (sunPos.azimuth - 90 + 360) % 360;
+
+        if (currentElevation > 0) {
+          prism.draw(currentAzimuth, currentElevation);
+        } else {
+          prism.drawOutline(mySocketId);
+        }
       } else {
-        myPrisms[i].drawOutline();
+        // No city set, just draw outline
+        prism.drawOutline(mySocketId);
       }
+
+      prism.drawLabel();
     }
   }
 
@@ -159,8 +193,23 @@ function draw() {
 }
 
 function mousePressed() {
+  // Ignore clicks if modal was just closed
+  if (modalJustClosed) {
+    return;
+  }
+
+  // Ignore clicks if modal is open
+  if (prismModal && prismModal.style('display') === 'flex') {
+    return;
+  }
+
+  // Ignore clicks in UI area (bottom-left corner)
+  if (mouseY > height - 60 && mouseX < 400) {
+    return;
+  }
+
   // Check if clicking on any existing prism
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < MAX_PRISMS; i++) {
     if (myPrisms[i] && myPrisms[i].containsPoint(mouseX, mouseY)) {
       // Deselect previously selected prism
       if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
@@ -179,30 +228,15 @@ function mousePressed() {
     selectedPrismIndex = null;
   }
 
-  // Place new prism in first empty slot
-  for (let i = 0; i < 3; i++) {
-    if (myPrisms[i] === null) {
-      myPrisms[i] = new Prism(mouseX, mouseY, 0, mySocketId || 'temp-id', i);
-      // Deselect previous
-      if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
-        myPrisms[selectedPrismIndex].isSelected = false;
-      }
-      // Select new prism
-      selectedPrismIndex = i;
-      myPrisms[i].isSelected = true;
-
-      // Emit to server
-      emitPrismUpdate(i);
-      break;
-    }
-  }
+  // Show modal to create new prism
+  showPrismModal(mouseX, mouseY);
 }
 
 function mouseDragged() {
   if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     myPrisms[selectedPrismIndex].x = mouseX;
     myPrisms[selectedPrismIndex].y = mouseY;
-
+    
     // Emit to server
     emitPrismUpdate(selectedPrismIndex);
   }
@@ -218,26 +252,6 @@ function keyPressed() {
   }
 }
 
-// Check for held keys
-function keyHeld() {
-  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
-    let rotationChanged = false;
-
-    if (keyIsDown(LEFT_ARROW)) {
-      myPrisms[selectedPrismIndex].rotation -= 1;
-      rotationChanged = true;
-    }
-    if (keyIsDown(RIGHT_ARROW)) {
-      myPrisms[selectedPrismIndex].rotation += 1;
-      rotationChanged = true;
-    }
-
-    // Emit rotation updates (throttled by frame rate)
-    if (rotationChanged) {
-      emitPrismUpdate(selectedPrismIndex);
-    }
-  }
-}
 
 function getSunPosition(lat, lon, date) {
   const rad = Math.PI / 180;
@@ -285,54 +299,430 @@ function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
+function createPrismModal() {
+  // Modal overlay
+  prismModal = createDiv('');
+  prismModal.style('position', 'fixed');
+  prismModal.style('top', '0');
+  prismModal.style('left', '0');
+  prismModal.style('width', '100%');
+  prismModal.style('height', '100%');
+  prismModal.style('background', 'rgba(0, 0, 0, 0.7)');
+  prismModal.style('display', 'none');
+  prismModal.style('z-index', '2000');
+  prismModal.style('align-items', 'center');
+  prismModal.style('justify-content', 'center');
+
+  // Modal content box
+  const modalContent = createDiv('');
+  modalContent.parent(prismModal);
+  modalContent.style('background', '#222');
+  modalContent.style('padding', '30px');
+  modalContent.style('border-radius', '8px');
+  modalContent.style('width', '400px');
+  modalContent.style('color', '#fff');
+  modalContent.style('font-family', 'monospace');
+
+  // Title
+  const title = createDiv('Create New Prism');
+  title.parent(modalContent);
+  title.style('font-size', '18px');
+  title.style('font-weight', 'bold');
+  title.style('margin-bottom', '20px');
+
+  // Name input
+  const nameLabel = createDiv('Your Name:');
+  nameLabel.parent(modalContent);
+  nameLabel.style('margin-bottom', '5px');
+  nameLabel.style('font-size', '12px');
+
+  const nameInput = createInput('');
+  nameInput.parent(modalContent);
+  nameInput.id('prism-name-input');
+  nameInput.style('width', '100%');
+  nameInput.style('padding', '8px');
+  nameInput.style('margin-bottom', '15px');
+  nameInput.style('background', '#333');
+  nameInput.style('color', '#fff');
+  nameInput.style('border', '1px solid #555');
+  nameInput.style('border-radius', '4px');
+  nameInput.style('font-family', 'monospace');
+  nameInput.style('font-size', '14px');
+  nameInput.attribute('placeholder', 'Enter your name');
+
+  // City search input
+  const cityLabel = createDiv('Search City:');
+  cityLabel.parent(modalContent);
+  cityLabel.style('margin-bottom', '5px');
+  cityLabel.style('font-size', '12px');
+
+  const cityInput = createInput('');
+  cityInput.parent(modalContent);
+  cityInput.id('prism-city-input');
+  cityInput.style('width', '100%');
+  cityInput.style('padding', '8px');
+  cityInput.style('margin-bottom', '10px');
+  cityInput.style('background', '#333');
+  cityInput.style('color', '#fff');
+  cityInput.style('border', '1px solid #555');
+  cityInput.style('border-radius', '4px');
+  cityInput.style('font-family', 'monospace');
+  cityInput.style('font-size', '14px');
+  cityInput.attribute('placeholder', 'Type to search cities...');
+
+  // City search results container
+  const resultsContainer = createDiv('');
+  resultsContainer.parent(modalContent);
+  resultsContainer.id('city-search-results');
+  resultsContainer.style('max-height', '200px');
+  resultsContainer.style('overflow-y', 'auto');
+  resultsContainer.style('margin-bottom', '15px');
+  resultsContainer.style('background', '#1a1a1a');
+  resultsContainer.style('border', '1px solid #444');
+  resultsContainer.style('border-radius', '4px');
+  resultsContainer.style('display', 'none');
+
+  // Selected city display
+  const selectedCityDiv = createDiv('');
+  selectedCityDiv.parent(modalContent);
+  selectedCityDiv.id('selected-city');
+  selectedCityDiv.style('margin-bottom', '20px');
+  selectedCityDiv.style('padding', '8px');
+  selectedCityDiv.style('background', '#2a4a2a');
+  selectedCityDiv.style('border-radius', '4px');
+  selectedCityDiv.style('font-size', '12px');
+  selectedCityDiv.style('display', 'none');
+
+  // Buttons container
+  const buttonsDiv = createDiv('');
+  buttonsDiv.parent(modalContent);
+  buttonsDiv.style('display', 'flex');
+  buttonsDiv.style('gap', '10px');
+  buttonsDiv.style('justify-content', 'flex-end');
+
+  // Cancel button
+  const cancelBtn = createButton('Cancel');
+  cancelBtn.parent(buttonsDiv);
+  cancelBtn.style('padding', '8px 16px');
+  cancelBtn.style('background', '#555');
+  cancelBtn.style('color', '#fff');
+  cancelBtn.style('border', 'none');
+  cancelBtn.style('border-radius', '4px');
+  cancelBtn.style('cursor', 'pointer');
+  cancelBtn.style('font-family', 'monospace');
+  cancelBtn.mousePressed(() => {
+    hidePrismModal();
+    return false;
+  });
+
+  // Create button
+  const createBtn = createButton('Create Prism');
+  createBtn.parent(buttonsDiv);
+  createBtn.id('create-prism-btn');
+  createBtn.style('padding', '8px 16px');
+  createBtn.style('background', '#4a7c4a');
+  createBtn.style('color', '#fff');
+  createBtn.style('border', 'none');
+  createBtn.style('border-radius', '4px');
+  createBtn.style('cursor', 'pointer');
+  createBtn.style('font-family', 'monospace');
+  createBtn.mousePressed(() => {
+    createPrismFromModal();
+    return false;
+  });
+
+  // Add city search functionality
+  let searchTimeout;
+  cityInput.input(() => {
+    clearTimeout(searchTimeout);
+    const query = cityInput.value();
+
+    if (query.length < 2) {
+      resultsContainer.style('display', 'none');
+      return;
+    }
+
+    searchTimeout = setTimeout(() => {
+      searchCities(query, resultsContainer);
+    }, 300);
+  });
+}
+
+function searchCities(query, resultsContainer) {
+  // Use Nominatim API
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`;
+
+  fetch(url)
+    .then(response => response.json())
+    .then(data => {
+      resultsContainer.html('');
+
+      if (data.length === 0) {
+        resultsContainer.html('<div style="padding: 10px; color: #888;">No cities found</div>');
+        resultsContainer.style('display', 'block');
+        return;
+      }
+
+      citySearchResults = data;
+      resultsContainer.style('display', 'block');
+
+      data.forEach((city, index) => {
+        const cityDiv = createDiv(city.display_name);
+        cityDiv.parent(resultsContainer);
+        cityDiv.style('padding', '8px');
+        cityDiv.style('cursor', 'pointer');
+        cityDiv.style('border-bottom', '1px solid #333');
+        cityDiv.style('font-size', '12px');
+
+        cityDiv.mouseOver(() => {
+          cityDiv.style('background', '#333');
+        });
+
+        cityDiv.mouseOut(() => {
+          cityDiv.style('background', 'transparent');
+        });
+
+        cityDiv.mousePressed(() => {
+          selectCity(city);
+          return false;
+        });
+      });
+    })
+    .catch(err => {
+      console.error('City search error:', err);
+    });
+}
+
+function selectCity(city) {
+  selectedCity = city;
+  const selectedCityDiv = select('#selected-city');
+  selectedCityDiv.html(`Selected: ${city.display_name}`);
+  selectedCityDiv.style('display', 'block');
+
+  const resultsContainer = select('#city-search-results');
+  resultsContainer.style('display', 'none');
+}
+
+function showPrismModal(x, y) {
+  pendingPrismPosition = { x, y };
+  prismModal.style('display', 'flex');
+
+  // Reset form
+  select('#prism-name-input').value('');
+  select('#prism-city-input').value('');
+  select('#city-search-results').style('display', 'none');
+  select('#selected-city').style('display', 'none');
+  selectedCity = null;
+
+  // Focus name input
+  setTimeout(() => {
+    select('#prism-name-input').elt.focus();
+  }, 100);
+}
+
+function hidePrismModal() {
+  prismModal.style('display', 'none');
+  pendingPrismPosition = null;
+  selectedCity = null;
+
+  // Set flag to prevent modal from reopening immediately
+  modalJustClosed = true;
+  setTimeout(() => {
+    modalJustClosed = false;
+  }, 100);
+}
+
+function createPrismFromModal() {
+  const name = select('#prism-name-input').value().trim();
+
+  if (!name) {
+    alert('Please enter your name');
+    return;
+  }
+
+  if (!selectedCity) {
+    alert('Please select a city');
+    return;
+  }
+
+  // Find first empty prism slot
+  for (let i = 0; i < MAX_PRISMS; i++) {
+    if (myPrisms[i] === null) {
+      // Create prism with city and name data
+      myPrisms[i] = new Prism(
+        pendingPrismPosition.x,
+        pendingPrismPosition.y,
+        -90,
+        mySocketId || 'temp-id',
+        i
+      );
+
+      // Add custom properties for city and name
+      myPrisms[i].cityName = selectedCity.display_name.split(',')[0]; // Just city name
+      myPrisms[i].cityLat = parseFloat(selectedCity.lat);
+      myPrisms[i].cityLon = parseFloat(selectedCity.lon);
+      myPrisms[i].userName = name;
+
+      // Select the new prism
+      if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+        myPrisms[selectedPrismIndex].isSelected = false;
+      }
+      selectedPrismIndex = i;
+      myPrisms[i].isSelected = true;
+
+      // Emit to server
+      emitPrismUpdate(i);
+      break;
+    }
+  }
+
+  hidePrismModal();
+}
+
+function createTimeControls() {
+  // Container for controls - horizontal layout at bottom
+  const controlsDiv = createDiv('');
+  controlsDiv.style('position', 'fixed');
+  controlsDiv.style('bottom', '5px');
+  controlsDiv.style('left', '30px');
+  controlsDiv.style('z-index', '1000');
+  controlsDiv.style('display', 'flex');
+  controlsDiv.style('align-items', 'center');
+  controlsDiv.style('gap', '8px');
+  controlsDiv.style('color', '#464646');
+  controlsDiv.style('font-family', 'monospace');
+  controlsDiv.style('font-size', '12px');
+
+  // Speed preset buttons
+  const speeds = [
+    { label: '1x', value: 1 },
+    { label: '300x', value: 300 },
+    { label: '3600x', value: 3600 }
+  ];
+
+  const speedButtons = [];
+  speeds.forEach((speed) => {
+    const btn = createButton(speed.label);
+    btn.parent(controlsDiv);
+    btn.style('padding', '3px 12px');
+    btn.style('background', speed.value === timeSpeed ? '#8b8b00' : '#333');
+    btn.style('color', '#fff');
+    btn.style('border', 'none');
+    btn.style('border-radius', '3px');
+    btn.style('cursor', 'pointer');
+    btn.style('font-family', 'monospace');
+    btn.style('font-size', '11px');
+
+    btn.mousePressed(() => {
+      timeSpeed = speed.value;
+      // Update all button styles
+      speedButtons.forEach((button, i) => {
+        button.style('background', speeds[i].value === timeSpeed ? '#8b8b00' : '#333');
+      });
+      return false; // Prevent event propagation to canvas
+    });
+
+    speedButtons.push(btn);
+  });
+
+  // Reset button
+  const resetBtn = createButton('Reset to Now');
+  resetBtn.parent(controlsDiv);
+  resetBtn.style('padding', '3px 12px');
+  resetBtn.style('background', '#333');
+  resetBtn.style('color', '#fff');
+  resetBtn.style('border', 'none');
+  resetBtn.style('border-radius', '3px');
+  resetBtn.style('cursor', 'pointer');
+  resetBtn.style('font-family', 'monospace');
+  resetBtn.style('font-size', '11px');
+
+  resetBtn.mousePressed(() => {
+    timeOffset = 0;
+    timeSpeed = 1;
+    // Update button styles to reflect 1x speed
+    speedButtons.forEach((button, i) => {
+      button.style('background', speeds[i].value === timeSpeed ? '#8b8b00' : '#333');
+    });
+    return false; // Prevent event propagation to canvas
+  });
+
+  // Create New Prism button
+  const newPrismBtn = createButton('Create New Prism');
+  newPrismBtn.parent(controlsDiv);
+  newPrismBtn.style('padding', '3px 12px');
+  newPrismBtn.style('background', '#4a7c4a');
+  newPrismBtn.style('color', '#fff');
+  newPrismBtn.style('border', 'none');
+  newPrismBtn.style('border-radius', '3px');
+  newPrismBtn.style('cursor', 'pointer');
+  newPrismBtn.style('font-family', 'monospace');
+  newPrismBtn.style('font-size', '11px');
+
+  newPrismBtn.mousePressed(() => {
+    // Open modal at center of screen
+    showPrismModal(width / 2, height / 2);
+    return false;
+  });
+}
+
 function initSocket() {
-  // Connect to server (adjust URL for production)
   socket = io();
 
   socket.on('connect', () => {
     console.log('Connected to server:', socket.id);
     mySocketId = socket.id;
+    
+    // Send initial location to server
+    socket.emit('location-update', { locationIndex: myLocation });
   });
 
   // Receive initial state of all users' prisms
   socket.on('init-state', (allUsers) => {
     console.log('Received init state:', allUsers);
-
+    
     // Convert server data to Prism objects
     for (let userId in allUsers) {
       if (userId === mySocketId) continue; // Skip our own prisms
-
-      allUserPrisms[userId] = [];
+      
+      allUserPrisms[userId] = {
+        prisms: [],
+        locationIndex: allUsers[userId].locationIndex || 0
+      };
+      
       for (let prismData of allUsers[userId].prisms) {
         if (prismData.x !== null && prismData.y !== null) {
-          allUserPrisms[userId].push(
-            new Prism(prismData.x, prismData.y, prismData.rotation, userId, prismData.id)
-          );
+          const prism = new Prism(prismData.x, prismData.y, prismData.rotation, userId, prismData.id);
+          prism.cityName = prismData.cityName || '';
+          prism.cityLat = prismData.cityLat || 0;
+          prism.cityLon = prismData.cityLon || 0;
+          prism.userName = prismData.userName || '';
+          allUserPrisms[userId].prisms.push(prism);
         } else {
-          allUserPrisms[userId].push(null);
+          allUserPrisms[userId].prisms.push(null);
         }
       }
-      // User's prisms expired due to inactivity
-      socket.on('user-expired', (userId) => {
-        console.log('User prisms expired:', userId);
-        if (allUserPrisms[userId]) {
-          delete allUserPrisms[userId];
-        }
-      });
     }
   });
 
   // New user joined
   socket.on('user-joined', (data) => {
     console.log('User joined:', data.userId);
-    allUserPrisms[data.userId] = [];
+    allUserPrisms[data.userId] = {
+      prisms: [],
+      locationIndex: data.locationIndex || 0
+    };
+    
     for (let prismData of data.prisms) {
       if (prismData.x !== null && prismData.y !== null) {
-        allUserPrisms[data.userId].push(
-          new Prism(prismData.x, prismData.y, prismData.rotation, data.userId, prismData.id)
-        );
+        const prism = new Prism(prismData.x, prismData.y, prismData.rotation, data.userId, prismData.id);
+        prism.cityName = prismData.cityName || '';
+        prism.cityLat = prismData.cityLat || 0;
+        prism.cityLon = prismData.cityLon || 0;
+        prism.userName = prismData.userName || '';
+        allUserPrisms[data.userId].prisms.push(prism);
       } else {
-        allUserPrisms[data.userId].push(null);
+        allUserPrisms[data.userId].prisms.push(null);
       }
     }
   });
@@ -340,26 +730,55 @@ function initSocket() {
   // Another user's prism was updated
   socket.on('prism-updated', (data) => {
     console.log('Prism updated:', data);
-
+    
     if (!allUserPrisms[data.userId]) {
-      allUserPrisms[data.userId] = [null, null, null];
+      allUserPrisms[data.userId] = {
+        prisms: Array(MAX_PRISMS).fill(null),
+        locationIndex: data.locationIndex || 0
+      };
     }
 
     const prismIndex = data.prismId;
-
+    
     if (data.x === null || data.y === null) {
       // Prism was deleted
-      allUserPrisms[data.userId][prismIndex] = null;
+      allUserPrisms[data.userId].prisms[prismIndex] = null;
     } else {
       // Prism was created or updated
-      if (allUserPrisms[data.userId][prismIndex]) {
+      if (allUserPrisms[data.userId].prisms[prismIndex]) {
         // Update existing prism
-        allUserPrisms[data.userId][prismIndex].update(data.x, data.y, data.rotation);
+        allUserPrisms[data.userId].prisms[prismIndex].x = data.x;
+        allUserPrisms[data.userId].prisms[prismIndex].y = data.y;
+        allUserPrisms[data.userId].prisms[prismIndex].rotation = data.rotation;
+        allUserPrisms[data.userId].prisms[prismIndex].cityName = data.cityName || '';
+        allUserPrisms[data.userId].prisms[prismIndex].cityLat = data.cityLat || 0;
+        allUserPrisms[data.userId].prisms[prismIndex].cityLon = data.cityLon || 0;
+        allUserPrisms[data.userId].prisms[prismIndex].userName = data.userName || '';
       } else {
         // Create new prism
-        allUserPrisms[data.userId][prismIndex] =
-          new Prism(data.x, data.y, data.rotation, data.userId, prismIndex);
+        const prism = new Prism(data.x, data.y, data.rotation, data.userId, prismIndex);
+        prism.cityName = data.cityName || '';
+        prism.cityLat = data.cityLat || 0;
+        prism.cityLon = data.cityLon || 0;
+        prism.userName = data.userName || '';
+        allUserPrisms[data.userId].prisms[prismIndex] = prism;
       }
+    }
+  });
+
+  // User's location changed
+  socket.on('location-updated', (data) => {
+    console.log('Location updated for user:', data.userId, 'to index:', data.locationIndex);
+    if (allUserPrisms[data.userId]) {
+      allUserPrisms[data.userId].locationIndex = data.locationIndex;
+    }
+  });
+
+  // User's prisms expired due to inactivity
+  socket.on('user-expired', (userId) => {
+    console.log('User prisms expired:', userId);
+    if (allUserPrisms[userId]) {
+      delete allUserPrisms[userId];
     }
   });
 
@@ -379,14 +798,19 @@ function emitPrismUpdate(prismIndex) {
     prismId: prismIndex,
     x: prism.x,
     y: prism.y,
-    rotation: prism.rotation
+    rotation: prism.rotation,
+    cityName: prism.cityName || '',
+    cityLat: prism.cityLat || 0,
+    cityLon: prism.cityLon || 0,
+    userName: prism.userName || '',
+    locationIndex: myLocation
   });
 }
 
 // Emit prism deletion to server
 function emitPrismDelete(prismIndex) {
   if (!socket) return;
-
+  
   socket.emit('prism-update', {
     prismId: prismIndex,
     x: null,

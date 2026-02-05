@@ -5,7 +5,7 @@ class Prism {
         this.rotation = rotation;
         this.ownerId = ownerId;
         this.prismId = prismId;
-        this.size = 50; // radius/edge factor
+        this.size = 30; // radius/edge factor
         this.isSelected = false;
 
         this.spectrum = [
@@ -189,10 +189,20 @@ class Prism {
         return results;
     }
 
-    drawOutline() {
+    drawOutline(mySocketId) {
         const verts = this.getVertices();
         noFill();
-        stroke(this.isSelected ? 200 : 70);
+
+        // Red for my prisms, white for others (HSB mode)
+        const isMine = this.ownerId === mySocketId;
+        if (isMine) {
+            // Red: hue=0, full saturation, brighter when selected
+            stroke(0, 100, this.isSelected ? 100 : 70);
+        } else {
+            // White: no saturation, brighter when selected
+            stroke(0, 0, this.isSelected ? 100 : 50);
+        }
+
         strokeWeight(this.isSelected ? 2 : 1);
         beginShape();
         for (let v of verts) vertex(v.x, v.y);
@@ -209,7 +219,7 @@ draw(sunAngle, sunElevation) {
 
     // Calculate ray length based on elevation
     // Scale factor to make it look good on screen
-    const maxRayLength = max(width, height) * 1; // Reach across entire canvas at low angles
+    const maxRayLength = max(width, height) * 2; // Reach across entire canvas at low angles
     const minRayLength = 100; // Minimum visible length
     
     let rayLength;
@@ -236,8 +246,8 @@ draw(sunAngle, sunElevation) {
         line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
 
         // Draw Emerging Path with elevation-based length
-        blendMode(ADD);
-        strokeWeight(5);
+        //blendMode(ADD);
+        strokeWeight(4);
         stroke(r.hue, 80, 100, 100);
         let beamX = r.exitPt.x + cos(r.angle) * rayLength;
         let beamY = r.exitPt.y + sin(r.angle) * rayLength;
@@ -265,5 +275,28 @@ draw(sunAngle, sunElevation) {
         this.x = x;
         this.y = y;
         this.rotation = rotation;
+    }
+
+    drawLabel() {
+        if (!this.userName && !this.cityName) return;
+
+        push();
+        fill(50);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(10);
+        textFont('monospace');
+
+        if (this.userName && this.cityName) {
+            // Draw on two lines
+            text(this.userName, this.x, this.y + this.size);
+            text(this.cityName, this.x, this.y + this.size + 12);
+        } else {
+            // Draw single line
+            const label = this.userName || this.cityName;
+            text(label, this.x, this.y + this.size);
+        }
+
+        pop();
     }
 }

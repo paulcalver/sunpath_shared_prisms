@@ -1,1 +1,1 @@
-# sunpath_shared_prisms
+# Sunpath Shared Prisms

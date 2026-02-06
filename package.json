@@ -2,11 +2,11 @@
   "name": "global-prisms",
   "version": "1.0.0",
   "description": "A web application that allows users to create and share interactive 3D prisms in a virtual space.",
-  "main": "app.js",
+  "main": "server.js",
   "type": "module",
    "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node app.js"
+    "start": "node server.js"
   },
   "author": "",
   "license": "ISC",

@@ -1,11 +1,20 @@
 // Configuration
 const MAX_PRISMS = 8; // Maximum number of prisms per user
 
+// Shader configuration
+const BLUR_AMOUNT = 2.0; // Blur strength (1.0-4.0 recommended)
+const GRAIN_AMOUNT = 0.2; // Film grain intensity (0.0-0.5 recommended)
+
 let currentElevation;
 let currentAzimuth;
 let timeDisplay;
 let timeSpeed = 3600; // 1 = real time, 60 = 1 minute per second, etc.
 let timeOffset = 0; // accumulated time offset in milliseconds
+
+// Shader variables
+let blurShader;
+let raysBuffer; // Off-screen P2D buffer for drawing light rays
+let shaderBuffer; // Off-screen WEBGL buffer for applying shader
 
 // Socket.IO variables
 let socket;
@@ -104,6 +113,11 @@ function cleanupUserLabels(userId) {
   }
 }
 
+function preload() {
+  // Load blur shader
+  blurShader = loadShader('shader.vert', 'blur.frag');
+}
+
 function getSunriseSunset(lat, lon, date) {
   const testDate = new Date(date);
   testDate.setHours(0, 0, 0, 0);
@@ -152,6 +166,14 @@ function setup() {
   angleMode(DEGREES);
   colorMode(HSB, 360, 100, 100, 100);
 
+  // Create off-screen buffer for light rays (use P2D for standard drawing)
+  raysBuffer = createGraphics(windowWidth, windowHeight);
+  raysBuffer.colorMode(HSB, 360, 100, 100, 100);
+  raysBuffer.angleMode(DEGREES);
+
+  // Create WEBGL buffer for applying shader
+  shaderBuffer = createGraphics(windowWidth, windowHeight, WEBGL);
+
   // Create DOM element for time display
   timeDisplay = createDiv('00:00:00');
   timeDisplay.style('position', 'fixed');
@@ -180,62 +202,101 @@ function draw() {
   updateTime();
   const now = getAnimatedTime();
 
-  // Check for held keys every frame
-  //keyHeld();
+  // PASS 1: Draw all prism outlines to main canvas
+  for (let userId in allUserPrisms) {
+    for (let i = 0; i < MAX_PRISMS; i++) {
+      if (allUserPrisms[userId].prisms[i]) {
+        const prism = allUserPrisms[userId].prisms[i];
+        prism.drawOutline(mySocketId);
+        updatePrismLabel(userId, i, prism);
+      }
+    }
+  }
 
-  // Draw all other users' prisms with EACH prism's city sun position
+  for (let i = 0; i < MAX_PRISMS; i++) {
+    if (myPrisms[i]) {
+      const prism = myPrisms[i];
+      prism.drawOutline(mySocketId);
+      updatePrismLabel(mySocketId, i, prism);
+    }
+  }
+
+  // PASS 2: Draw all light rays to off-screen buffer
+  raysBuffer.clear();
+
+  // Draw other users' rays
   for (let userId in allUserPrisms) {
     for (let i = 0; i < MAX_PRISMS; i++) {
       if (allUserPrisms[userId].prisms[i]) {
         const prism = allUserPrisms[userId].prisms[i];
 
-        // Use prism's own city coordinates for sun position
         if (prism.cityLat && prism.cityLon) {
           const sunPos = getSunPosition(prism.cityLat, prism.cityLon, now);
           const elevation = sunPos.elevation;
           const azimuth = (sunPos.azimuth - 90 + 360) % 360;
 
           if (elevation > 0) {
-            prism.draw(azimuth, elevation);
-          } else {
-            prism.drawOutline(mySocketId);
+            prism.drawRays(azimuth, elevation, raysBuffer);
           }
-        } else {
-          // No city set, just draw outline
-          prism.drawOutline(mySocketId);
         }
-
-        updatePrismLabel(userId, i, prism);
       }
     }
   }
 
-  // Draw my prisms with EACH prism's city sun position
+  // Draw my rays
   for (let i = 0; i < MAX_PRISMS; i++) {
     if (myPrisms[i]) {
       const prism = myPrisms[i];
 
-      // Use prism's own city coordinates for sun position
       if (prism.cityLat && prism.cityLon) {
         const sunPos = getSunPosition(prism.cityLat, prism.cityLon, now);
         currentElevation = sunPos.elevation;
         currentAzimuth = (sunPos.azimuth - 90 + 360) % 360;
 
         if (currentElevation > 0) {
-          prism.draw(currentAzimuth, currentElevation);
-        } else {
-          prism.drawOutline(mySocketId);
+          prism.drawRays(currentAzimuth, currentElevation, raysBuffer);
         }
-      } else {
-        // No city set, just draw outline
-        prism.drawOutline(mySocketId);
       }
-
-      updatePrismLabel(mySocketId, i, prism);
     }
   }
 
+  // PASS 3: Apply blur shader to WEBGL buffer
+  shaderBuffer.clear(); // Clear the shader buffer each frame
+
+  shaderBuffer.shader(blurShader);
+  blurShader.setUniform('tex0', raysBuffer);
+  blurShader.setUniform('texelSize', [1.0 / width, 1.0 / height]);
+  blurShader.setUniform('blurAmount', BLUR_AMOUNT);
+  blurShader.setUniform('grainAmount', GRAIN_AMOUNT);
+  blurShader.setUniform('time', millis() * 0.001);
+
+  // Draw full screen rect with shader in WEBGL buffer
+  shaderBuffer.push();
+  shaderBuffer.noStroke();
+  shaderBuffer.rectMode(CENTER);
+  shaderBuffer.rect(0, 0, width, height);
+  shaderBuffer.pop();
+
+  // PASS 4: Composite shader result to main canvas
+  push();
+  blendMode(BLEND); // Use normal blend instead of ADD
+  image(shaderBuffer, 0, 0);
+  pop();
+
+  blendMode(BLEND); // Reset blend mode
+
   updateTimeDisplay();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+
+  // Recreate buffers with new dimensions
+  raysBuffer = createGraphics(windowWidth, windowHeight);
+  raysBuffer.colorMode(HSB, 360, 100, 100, 100);
+  raysBuffer.angleMode(DEGREES);
+
+  shaderBuffer = createGraphics(windowWidth, windowHeight, WEBGL);
 }
 
 function mousePressed() {

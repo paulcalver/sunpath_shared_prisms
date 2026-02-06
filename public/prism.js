@@ -210,64 +210,62 @@ class Prism {
     }
 
     // Updated draw method needs sunSource coordinates
-draw(sunAngle, sunElevation) {
-    angleMode(DEGREES);
-    this.drawOutline();
+    // graphicsBuffer: optional p5.Graphics object to draw rays to (for shader effects)
+    drawRays(sunAngle, sunElevation, graphicsBuffer) {
+        let rays = this.calculateRefraction(sunAngle);
+        if (!rays) return;
 
-    let rays = this.calculateRefraction(sunAngle);
-    if (!rays) return;
+        // Calculate ray length based on elevation
+        const maxRayLength = max(width, height) * 2;
+        const minRayLength = 100;
 
-    // Calculate ray length based on elevation
-    // Scale factor to make it look good on screen
-    const maxRayLength = max(width, height) * 2; // Reach across entire canvas at low angles
-    const minRayLength = 100; // Minimum visible length
-    
-    let rayLength;
-    
-    if (sunElevation < 0.5) {
-        // Sun below horizon or just at it - maximum length
-        rayLength = maxRayLength;
-    } else if (sunElevation > 80) {
-        // Nearly overhead - minimum length
-        rayLength = minRayLength;
-    } else {
-        // Inverse relationship: lower elevation = longer rays
-        // Map elevation 0.5° to 80° onto ray length maxRayLength to minRayLength
-        rayLength = map(sunElevation, 0.5, 80, maxRayLength, minRayLength);
+        let rayLength;
+
+        if (sunElevation < 0.5) {
+            rayLength = maxRayLength;
+        } else if (sunElevation > 80) {
+            rayLength = minRayLength;
+        } else {
+            rayLength = map(sunElevation, 0.5, 80, maxRayLength, minRayLength);
+        }
+
+        // Choose which context to draw to
+        const g = graphicsBuffer || window;
+
+        g.push();
+        g.angleMode(DEGREES);
+        g.colorMode(HSB, 360, 100, 100, 100);
+
+        for (let r of rays) {
+            g.strokeWeight(2);
+
+            // Draw Internal Path
+            g.stroke(r.hue, 50, 100, 50);
+            g.line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
+
+            // Draw Emerging Path as expanding wedge
+            let beamX = r.exitPt.x + cos(r.angle) * rayLength;
+            let beamY = r.exitPt.y + sin(r.angle) * rayLength;
+
+            // Calculate width at the far end (proportional to ray length)
+            let widthAtEnd = rayLength * 0.015;
+
+            // Perpendicular angle for width
+            let perpAngle = r.angle + 90;
+
+            // Two edge points at the far end
+            let x1 = beamX + cos(perpAngle) * widthAtEnd;
+            let y1 = beamY + sin(perpAngle) * widthAtEnd;
+            let x2 = beamX + cos(perpAngle + 180) * widthAtEnd;
+            let y2 = beamY + sin(perpAngle + 180) * widthAtEnd;
+
+            // Draw as filled triangle (wedge)
+            g.fill(r.hue, 80, 100, 80);
+            g.noStroke();
+            g.triangle(r.exitPt.x, r.exitPt.y, x1, y1, x2, y2);
+        }
+        g.pop();
     }
-
-    push();
-    colorMode(HSB, 360, 100, 100, 100);
-    for (let r of rays) {
-        strokeWeight(2);
-
-        // Draw Internal Path
-        stroke(r.hue, 50, 100, 50);
-        line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
-
-        // Draw Emerging Path as expanding wedge
-        let beamX = r.exitPt.x + cos(r.angle) * rayLength;
-        let beamY = r.exitPt.y + sin(r.angle) * rayLength;
-
-        // Calculate width at the far end (proportional to ray length)
-        let widthAtEnd = rayLength * 0.015; // Adjust this factor to control spread
-
-        // Perpendicular angle for width
-        let perpAngle = r.angle + 90;
-
-        // Two edge points at the far end
-        let x1 = beamX + cos(perpAngle) * widthAtEnd;
-        let y1 = beamY + sin(perpAngle) * widthAtEnd;
-        let x2 = beamX + cos(perpAngle + 180) * widthAtEnd;
-        let y2 = beamY + sin(perpAngle + 180) * widthAtEnd;
-
-        // Draw as filled triangle (wedge)
-        fill(r.hue, 80, 100, 80);
-        noStroke();
-        triangle(r.exitPt.x, r.exitPt.y, x1, y1, x2, y2);
-    }
-    pop();
-}
 
     containsPoint(px, py) {
         const vertices = this.getVertices();

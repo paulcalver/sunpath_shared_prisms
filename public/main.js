@@ -6,7 +6,7 @@ const BLUR_AMOUNT = 3.2; // Blur strength (1.0-4.0 recommended)
 const GRAIN_AMOUNT = 0.2; // Film grain intensity (0.0-0.5 recommended)
 
 // Label configuration
-const LABEL_OFFSET = 40; // Distance between prism and label in pixels
+const LABEL_OFFSET = 30; // Distance between prism and label in pixels
 
 let currentElevation;
 let currentAzimuth;

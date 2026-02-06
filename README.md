@@ -6,6 +6,6 @@ Each prism maintains its own local time while existing in a communal field where
 
 Live communal demo here - https://global-prisms.onrender.com/
 
-![Global_Prisms_01](https://github.com/user-attachments/assets/78e41210-0a97-4456-9754-5d1f9db99c02)
-![Global_Prisms_02](https://github.com/user-attachments/assets/f911ef1f-ec11-467c-8f90-d8d9f9e9d89d)
+![Global_Prisms_03](https://github.com/user-attachments/assets/04fca973-557c-47f2-b453-12631336fd7e)
+
 

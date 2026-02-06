@@ -393,6 +393,12 @@ function keyPressed() {
   if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     if (keyCode === DELETE || keyCode === BACKSPACE) {
       emitPrismDelete(selectedPrismIndex);
+      // Clean up the label
+      const key = `${mySocketId}-${selectedPrismIndex}`;
+      if (labelElements[key]) {
+        labelElements[key].remove();
+        delete labelElements[key];
+      }
       myPrisms[selectedPrismIndex] = null;
       selectedPrismIndex = null;
     }
@@ -907,6 +913,12 @@ function initSocket() {
     if (data.x === null || data.y === null) {
       // Prism was deleted
       allUserPrisms[data.userId].prisms[prismIndex] = null;
+      // Clean up the label
+      const key = `${data.userId}-${prismIndex}`;
+      if (labelElements[key]) {
+        labelElements[key].remove();
+        delete labelElements[key];
+      }
     } else {
       // Prism was created or updated
       // Denormalize positions from 0-1 range to current screen size

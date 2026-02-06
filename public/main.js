@@ -349,8 +349,8 @@ function mouseDragged() {
 }
 
 function keyPressed() {
-  // Toggle UI controls with 'h' key
-  if (key === 'h' || key === 'H') {
+  // Toggle UI controls with '-' key
+  if (key === '-') {
     showUI = !showUI;
     if (controlsDiv) {
       controlsDiv.style('display', showUI ? 'flex' : 'none');

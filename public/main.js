@@ -32,6 +32,7 @@ let modalJustClosed = false; // Flag to prevent modal from reopening immediately
 
 // UI state
 let showLabels = true; // Toggle for showing/hiding prism labels
+let labelElements = {}; // Store DOM elements for labels: { "userId-prismId": element }
 
 // Return current animated time
 function getAnimatedTime() {
@@ -45,6 +46,61 @@ function updateTime() {
     // Add (timeSpeed - 1) seconds worth of time per frame
     // At 60fps, each frame is ~16.67ms
     timeOffset += (timeSpeed - 1) * (1000 / 60);
+  }
+}
+
+// Create or update a DOM label for a prism
+function updatePrismLabel(userId, prismId, prism) {
+  const key = `${userId}-${prismId}`;
+
+  // If prism has no label data, remove any existing label
+  if (!prism.userName && !prism.cityName) {
+    if (labelElements[key]) {
+      labelElements[key].remove();
+      delete labelElements[key];
+    }
+    return;
+  }
+
+  // Create label if it doesn't exist
+  if (!labelElements[key]) {
+    labelElements[key] = createDiv('');
+    labelElements[key].style('position', 'fixed');
+    labelElements[key].style('font-family', 'monospace');
+    labelElements[key].style('font-size', '10px');
+    labelElements[key].style('color', '#323232');
+    labelElements[key].style('pointer-events', 'none');
+    labelElements[key].style('text-align', 'center');
+    labelElements[key].style('line-height', '1.2');
+    labelElements[key].style('z-index', '500');
+  }
+
+  // Update content
+  if (prism.userName && prism.cityName) {
+    labelElements[key].html(`${prism.userName}<br>${prism.cityName}`);
+  } else {
+    labelElements[key].html(prism.userName || prism.cityName);
+  }
+
+  // Update position (convert canvas coords to screen coords)
+  const canvasElement = document.querySelector('canvas');
+  const rect = canvasElement.getBoundingClientRect();
+  labelElements[key].style('left', `${rect.left + prism.x}px`);
+  labelElements[key].style('top', `${rect.top + prism.y + prism.size}px`);
+  labelElements[key].style('transform', 'translateX(-50%)');
+
+  // Show/hide based on showLabels flag
+  labelElements[key].style('display', showLabels ? 'block' : 'none');
+}
+
+// Clean up all labels for a specific user
+function cleanupUserLabels(userId) {
+  for (let i = 0; i < MAX_PRISMS; i++) {
+    const key = `${userId}-${i}`;
+    if (labelElements[key]) {
+      labelElements[key].remove();
+      delete labelElements[key];
+    }
   }
 }
 
@@ -149,9 +205,7 @@ function draw() {
           prism.drawOutline(mySocketId);
         }
 
-        if (showLabels) {
-          prism.drawLabel();
-        }
+        updatePrismLabel(userId, i, prism);
       }
     }
   }
@@ -177,9 +231,7 @@ function draw() {
         prism.drawOutline(mySocketId);
       }
 
-      if (showLabels) {
-        prism.drawLabel();
-      }
+      updatePrismLabel(mySocketId, i, prism);
     }
   }
 
@@ -788,6 +840,7 @@ function initSocket() {
   socket.on('user-expired', (userId) => {
     console.log('User prisms expired:', userId);
     if (allUserPrisms[userId]) {
+      cleanupUserLabels(userId);
       delete allUserPrisms[userId];
     }
   });

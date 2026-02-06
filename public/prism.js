@@ -288,27 +288,4 @@ draw(sunAngle, sunElevation) {
         this.y = y;
         this.rotation = rotation;
     }
-
-    drawLabel() {
-        if (!this.userName && !this.cityName) return;
-
-        push();
-        fill(50);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        textSize(10);
-        textFont('monospace');
-
-        if (this.userName && this.cityName) {
-            // Draw on two lines
-            text(this.userName, this.x, this.y + this.size);
-            text(this.cityName, this.x, this.y + this.size + 12);
-        } else {
-            // Draw single line
-            const label = this.userName || this.cityName;
-            text(label, this.x, this.y + this.size);
-        }
-
-        pop();
-    }
 }

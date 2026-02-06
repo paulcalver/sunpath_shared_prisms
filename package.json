@@ -1,18 +1,18 @@
 {
-  "name": "prism-refraction",
+  "name": "global-prisms",
   "version": "1.0.0",
-  "description": "Networked prism refraction visualization",
+  "description": "A web application that allows users to create and share interactive 3D prisms in a virtual space.",
   "main": "app.js",
   "type": "module",
-  "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js"
+   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
   },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.6.1"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.22"
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "open": "^11.0.0"
   }
 }

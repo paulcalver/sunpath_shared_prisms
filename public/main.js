@@ -860,29 +860,21 @@ function createTimeControls() {
   newPrismBtn.style('font-size', '11px');
 
   newPrismBtn.mousePressed(() => {
-    // Open modal at center of screen
-    showPrismModal(width / 2, height / 2);
+    // Open modal with random position (with margin from edges)
+    const margin = 100;
+    const randomX = random(margin, width - margin);
+    const randomY = random(margin, height - margin);
+    showPrismModal(randomX, randomY);
     return false;
   });
 
-  // Toggle Labels button
-  const toggleLabelsBtn = createButton(showLabels ? 'Hide Labels' : 'Show Labels');
-  toggleLabelsBtn.parent(controlsDiv);
-  toggleLabelsBtn.id('toggle-labels-btn');
-  toggleLabelsBtn.style('padding', '3px 12px');
-  toggleLabelsBtn.style('background', '#333');
-  toggleLabelsBtn.style('color', '#fff');
-  toggleLabelsBtn.style('border', 'none');
-  toggleLabelsBtn.style('border-radius', '3px');
-  toggleLabelsBtn.style('cursor', 'pointer');
-  toggleLabelsBtn.style('font-family', 'monospace');
-  toggleLabelsBtn.style('font-size', '11px');
-
-  toggleLabelsBtn.mousePressed(() => {
-    showLabels = !showLabels;
-    toggleLabelsBtn.html(showLabels ? 'Hide Labels' : 'Show Labels');
-    return false;
-  });
+  // UI hint text
+  const uiHint = createDiv('Hide UI with "-" key | Click your prisms to select, drag to move, delete with DEL/BACKSPACE');
+  uiHint.parent(controlsDiv);
+  uiHint.style('color', '#666');
+  uiHint.style('font-family', 'monospace');
+  uiHint.style('font-size', '11px');
+  uiHint.style('padding', '3px 8px');
 }
 
 function initSocket() {

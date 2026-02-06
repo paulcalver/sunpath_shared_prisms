@@ -21,17 +21,35 @@ const DATA_FILE = process.env.DATA_PATH
   ? path.join(process.env.DATA_PATH, 'prisms-data.json')
   : path.join(process.cwd(), 'prisms-data.json');
 
+console.log('Data file path:', DATA_FILE);
+console.log('DATA_PATH env var:', process.env.DATA_PATH || 'not set');
+
+// Ensure data directory exists
+if (process.env.DATA_PATH) {
+  try {
+    if (!fs.existsSync(process.env.DATA_PATH)) {
+      fs.mkdirSync(process.env.DATA_PATH, { recursive: true });
+      console.log('Created data directory:', process.env.DATA_PATH);
+    }
+  } catch (error) {
+    console.error('Error creating data directory:', error);
+  }
+}
+
 // Load data from file on startup
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
+      console.log('Loading data from:', DATA_FILE);
       const data = fs.readFileSync(DATA_FILE, 'utf8');
       const loaded = JSON.parse(data);
-      console.log(`Loaded ${Object.keys(loaded).length} users from persistent storage`);
+      console.log(`✓ Loaded ${Object.keys(loaded).length} users from persistent storage`);
       return loaded;
+    } else {
+      console.log('No existing data file found at:', DATA_FILE);
     }
   } catch (error) {
-    console.error('Error loading data:', error);
+    console.error('✗ Error loading data:', error.message);
   }
   return {};
 }
@@ -40,9 +58,10 @@ function loadData() {
 function saveData() {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(allUsers, null, 2), 'utf8');
-    console.log(`Saved ${Object.keys(allUsers).length} users to persistent storage`);
+    console.log(`✓ Saved ${Object.keys(allUsers).length} users to: ${DATA_FILE}`);
   } catch (error) {
-    console.error('Error saving data:', error);
+    console.error('✗ Error saving data:', error.message);
+    console.error('  Make sure the directory exists and has write permissions');
   }
 }
 

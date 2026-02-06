@@ -304,6 +304,9 @@ function windowResized() {
 
   shaderBuffer = createGraphics(windowWidth, windowHeight, WEBGL);
   
+  // Reload shader for the new WebGL context
+  blurShader = loadShader('shader.vert', 'blur.frag');
+  
   // Reposition all other users' prisms based on normalized coordinates
   if (oldWidth > 0 && oldHeight > 0) {
     // Reposition my own prisms

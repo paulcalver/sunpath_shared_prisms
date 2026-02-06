@@ -1,6 +1,8 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 const server = http.createServer(app);
@@ -10,10 +12,40 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 // Store all users' prisms with timestamps and locations
-const allUsers = {};
+let allUsers = {};
 
 const EXPIRY_TIME = 7 * 24 * 60 * 60 * 1000; // 7 days
 const CLEANUP_INTERVAL = 60 * 1000; // 60 seconds
+const SAVE_INTERVAL = 5 * 60 * 1000; // Save every 5 minutes
+const DATA_FILE = path.join(process.cwd(), 'prisms-data.json');
+
+// Load data from file on startup
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = fs.readFileSync(DATA_FILE, 'utf8');
+      const loaded = JSON.parse(data);
+      console.log(`Loaded ${Object.keys(loaded).length} users from persistent storage`);
+      return loaded;
+    }
+  } catch (error) {
+    console.error('Error loading data:', error);
+  }
+  return {};
+}
+
+// Save data to file
+function saveData() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(allUsers, null, 2), 'utf8');
+    console.log(`Saved ${Object.keys(allUsers).length} users to persistent storage`);
+  } catch (error) {
+    console.error('Error saving data:', error);
+  }
+}
+
+// Load existing data on startup
+allUsers = loadData();
 
 function cleanupExpiredPrisms() {
   const now = Date.now();
@@ -30,9 +62,15 @@ function cleanupExpiredPrisms() {
     delete allUsers[userId];
     io.emit('user-expired', userId);
   }
+  
+  // Save after cleanup if any users were removed
+  if (usersToRemove.length > 0) {
+    saveData();
+  }
 }
 
 setInterval(cleanupExpiredPrisms, CLEANUP_INTERVAL);
+setInterval(saveData, SAVE_INTERVAL);
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -122,11 +160,32 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     // console.log('User disconnected:', socket.id);
     socket.broadcast.emit('user-disconnected', socket.id);
+    // Note: We keep the user data for 7 days even after disconnect
+  });
+});
+
+// Save data on graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, saving data before shutdown...');
+  saveData();
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, saving data before shutdown...');
+  saveData();
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  // console.log(`Server running on port ${PORT}`);
-  console.log(`Prisms will expire after ${EXPIRY_TIME / 1000 / 60} minutes of inactivity`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Prisms will expire after ${EXPIRY_TIME / 1000 / 60 / 60 / 24} days of inactivity`);
+  console.log(`Data will be saved every ${SAVE_INTERVAL / 1000 / 60} minutes`);
 });

@@ -245,14 +245,26 @@ draw(sunAngle, sunElevation) {
         stroke(r.hue, 50, 100, 50);
         line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
 
-        // Draw Emerging Path with elevation-based length
-        //blendMode(ADD);
-        strokeWeight(4);
-        stroke(r.hue, 80, 100, 100);
+        // Draw Emerging Path as expanding wedge
         let beamX = r.exitPt.x + cos(r.angle) * rayLength;
         let beamY = r.exitPt.y + sin(r.angle) * rayLength;
-        line(r.exitPt.x, r.exitPt.y, beamX, beamY);
-        
+
+        // Calculate width at the far end (proportional to ray length)
+        let widthAtEnd = rayLength * 0.015; // Adjust this factor to control spread
+
+        // Perpendicular angle for width
+        let perpAngle = r.angle + 90;
+
+        // Two edge points at the far end
+        let x1 = beamX + cos(perpAngle) * widthAtEnd;
+        let y1 = beamY + sin(perpAngle) * widthAtEnd;
+        let x2 = beamX + cos(perpAngle + 180) * widthAtEnd;
+        let y2 = beamY + sin(perpAngle + 180) * widthAtEnd;
+
+        // Draw as filled triangle (wedge)
+        fill(r.hue, 80, 100, 80);
+        noStroke();
+        triangle(r.exitPt.x, r.exitPt.y, x1, y1, x2, y2);
     }
     pop();
 }

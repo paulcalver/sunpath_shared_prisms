@@ -1,4 +1,4 @@
-# Global Prism
+# Global Prisms
 
 A shared virtual space where people across the world place their own prisms, each responding to the sun's path relative to its geographic location. As the Earth rotates, prisms glow and dim with their local solar cycles, creating a living constellation of coloured beacons that charts our planet's movement through space.
 

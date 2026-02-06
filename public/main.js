@@ -291,6 +291,10 @@ function draw() {
 }
 
 function windowResized() {
+  // Store old dimensions for repositioning prisms
+  const oldWidth = width;
+  const oldHeight = height;
+  
   resizeCanvas(windowWidth, windowHeight);
 
   // Recreate buffers with new dimensions
@@ -299,6 +303,33 @@ function windowResized() {
   raysBuffer.angleMode(DEGREES);
 
   shaderBuffer = createGraphics(windowWidth, windowHeight, WEBGL);
+  
+  // Reposition all other users' prisms based on normalized coordinates
+  if (oldWidth > 0 && oldHeight > 0) {
+    // Reposition my own prisms
+    for (let prism of myPrisms) {
+      if (prism) {
+        const normalizedX = prism.x / oldWidth;
+        const normalizedY = prism.y / oldHeight;
+        prism.x = normalizedX * windowWidth;
+        prism.y = normalizedY * windowHeight;
+      }
+    }
+    
+    // Reposition other users' prisms
+    for (let userId in allUserPrisms) {
+      for (let prism of allUserPrisms[userId].prisms) {
+        if (prism) {
+          // Convert to normalized coordinates using old dimensions
+          const normalizedX = prism.x / oldWidth;
+          const normalizedY = prism.y / oldHeight;
+          // Apply to new dimensions
+          prism.x = normalizedX * windowWidth;
+          prism.y = normalizedY * windowHeight;
+        }
+      }
+    }
+  }
 }
 
 function mousePressed() {
@@ -409,10 +440,6 @@ function getSunPosition(lat, lon, date) {
   azimuth = (azimuth + 360) % 360;
 
   return { azimuth, elevation };
-}
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
 }
 
 function createPrismModal() {
@@ -827,7 +854,8 @@ function initSocket() {
       
       for (let prismData of allUsers[userId].prisms) {
         if (prismData.x !== null && prismData.y !== null) {
-          const prism = new Prism(prismData.x, prismData.y, prismData.rotation, userId, prismData.id);
+          // Denormalize positions from 0-1 range to current screen size
+          const prism = new Prism(prismData.x * windowWidth, prismData.y * windowHeight, prismData.rotation, userId, prismData.id);
           prism.cityName = prismData.cityName || '';
           prism.cityLat = prismData.cityLat || 0;
           prism.cityLon = prismData.cityLon || 0;
@@ -850,7 +878,8 @@ function initSocket() {
     
     for (let prismData of data.prisms) {
       if (prismData.x !== null && prismData.y !== null) {
-        const prism = new Prism(prismData.x, prismData.y, prismData.rotation, data.userId, prismData.id);
+        // Denormalize positions from 0-1 range to current screen size
+        const prism = new Prism(prismData.x * windowWidth, prismData.y * windowHeight, prismData.rotation, data.userId, prismData.id);
         prism.cityName = prismData.cityName || '';
         prism.cityLat = prismData.cityLat || 0;
         prism.cityLon = prismData.cityLon || 0;
@@ -880,10 +909,14 @@ function initSocket() {
       allUserPrisms[data.userId].prisms[prismIndex] = null;
     } else {
       // Prism was created or updated
+      // Denormalize positions from 0-1 range to current screen size
+      const actualX = data.x * windowWidth;
+      const actualY = data.y * windowHeight;
+      
       if (allUserPrisms[data.userId].prisms[prismIndex]) {
         // Update existing prism
-        allUserPrisms[data.userId].prisms[prismIndex].x = data.x;
-        allUserPrisms[data.userId].prisms[prismIndex].y = data.y;
+        allUserPrisms[data.userId].prisms[prismIndex].x = actualX;
+        allUserPrisms[data.userId].prisms[prismIndex].y = actualY;
         allUserPrisms[data.userId].prisms[prismIndex].rotation = data.rotation;
         allUserPrisms[data.userId].prisms[prismIndex].cityName = data.cityName || '';
         allUserPrisms[data.userId].prisms[prismIndex].cityLat = data.cityLat || 0;
@@ -891,7 +924,7 @@ function initSocket() {
         allUserPrisms[data.userId].prisms[prismIndex].userName = data.userName || '';
       } else {
         // Create new prism
-        const prism = new Prism(data.x, data.y, data.rotation, data.userId, prismIndex);
+        const prism = new Prism(actualX, actualY, data.rotation, data.userId, prismIndex);
         prism.cityName = data.cityName || '';
         prism.cityLat = data.cityLat || 0;
         prism.cityLon = data.cityLon || 0;
@@ -930,10 +963,11 @@ function emitPrismUpdate(prismIndex) {
   if (!socket || !myPrisms[prismIndex]) return;
 
   const prism = myPrisms[prismIndex];
+  // Normalize positions to 0-1 range for consistent placement across screen sizes
   socket.emit('prism-update', {
     prismId: prismIndex,
-    x: prism.x,
-    y: prism.y,
+    x: prism.x / windowWidth,
+    y: prism.y / windowHeight,
     rotation: prism.rotation,
     cityName: prism.cityName || '',
     cityLat: prism.cityLat || 0,

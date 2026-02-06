@@ -15,6 +15,7 @@ let timeOffset = 0; // accumulated time offset in milliseconds
 let blurShader;
 let raysBuffer; // Off-screen P2D buffer for drawing light rays
 let shaderBuffer; // Off-screen WEBGL buffer for applying shader
+let isResizing = false; // Flag to prevent shader usage during resize
 
 // Socket.IO variables
 let socket;
@@ -116,8 +117,13 @@ function cleanupUserLabels(userId) {
 }
 
 function preload() {
-  // Load blur shader
-  blurShader = loadShader('shader.vert', 'blur.frag');
+  // Load blur shader with error handling
+  try {
+    blurShader = loadShader('shader.vert', 'blur.frag');
+  } catch (e) {
+    console.error('Failed to load shader:', e);
+    blurShader = null;
+  }
 }
 
 function getSunriseSunset(lat, lon, date) {
@@ -196,6 +202,13 @@ function setup() {
 
   // Initialize Socket.IO
   initSocket();
+
+  // Log shader status
+  if (blurShader) {
+    console.log('✓ Blur shader loaded successfully');
+  } else {
+    console.warn('⚠ Blur shader failed to load - using fallback rendering');
+  }
 }
 
 function draw() {
@@ -262,28 +275,45 @@ function draw() {
     }
   }
 
-  // PASS 3: Apply blur shader to WEBGL buffer
-  shaderBuffer.clear(); // Clear the shader buffer each frame
+  // PASS 3: Apply blur shader to WEBGL buffer (with error handling)
+  if (blurShader && shaderBuffer && !isResizing) {
+    try {
+      shaderBuffer.clear(); // Clear the shader buffer each frame
 
-  shaderBuffer.shader(blurShader);
-  blurShader.setUniform('tex0', raysBuffer);
-  blurShader.setUniform('texelSize', [1.0 / width, 1.0 / height]);
-  blurShader.setUniform('blurAmount', BLUR_AMOUNT);
-  blurShader.setUniform('grainAmount', GRAIN_AMOUNT);
-  blurShader.setUniform('time', millis() * 0.001);
+      shaderBuffer.shader(blurShader);
+      blurShader.setUniform('tex0', raysBuffer);
+      blurShader.setUniform('texelSize', [1.0 / width, 1.0 / height]);
+      blurShader.setUniform('blurAmount', BLUR_AMOUNT);
+      blurShader.setUniform('grainAmount', GRAIN_AMOUNT);
+      blurShader.setUniform('time', millis() * 0.001);
 
-  // Draw full screen rect with shader in WEBGL buffer
-  shaderBuffer.push();
-  shaderBuffer.noStroke();
-  shaderBuffer.rectMode(CENTER);
-  shaderBuffer.rect(0, 0, width, height);
-  shaderBuffer.pop();
+      // Draw full screen rect with shader in WEBGL buffer
+      shaderBuffer.push();
+      shaderBuffer.noStroke();
+      shaderBuffer.rectMode(CENTER);
+      shaderBuffer.rect(0, 0, width, height);
+      shaderBuffer.pop();
 
-  // PASS 4: Composite shader result to main canvas
-  push();
-  blendMode(BLEND); // Use normal blend instead of ADD
-  image(shaderBuffer, 0, 0);
-  pop();
+      // PASS 4: Composite shader result to main canvas
+      push();
+      blendMode(BLEND);
+      image(shaderBuffer, 0, 0);
+      pop();
+    } catch (e) {
+      console.warn('Shader error, using fallback rendering:', e);
+      // Fallback: just draw the rays buffer directly
+      push();
+      blendMode(BLEND);
+      image(raysBuffer, 0, 0);
+      pop();
+    }
+  } else {
+    // Fallback: just draw the rays buffer directly if shader not loaded
+    push();
+    blendMode(BLEND);
+    image(raysBuffer, 0, 0);
+    pop();
+  }
 
   blendMode(BLEND); // Reset blend mode
 
@@ -295,6 +325,10 @@ function windowResized() {
   const oldWidth = width;
   const oldHeight = height;
   
+  // Immediately invalidate the old shader to prevent errors
+  isResizing = true;
+  blurShader = null;
+  
   resizeCanvas(windowWidth, windowHeight);
 
   // Recreate buffers with new dimensions
@@ -303,9 +337,23 @@ function windowResized() {
   raysBuffer.angleMode(DEGREES);
 
   shaderBuffer = createGraphics(windowWidth, windowHeight, WEBGL);
-  
-  // Reload shader for the new WebGL context
-  blurShader = loadShader('shader.vert', 'blur.frag');
+
+  // Reload shader for the new WebGL context with callbacks
+  // loadShader is asynchronous, so we use callbacks to know when it's ready
+  loadShader('shader.vert', 'blur.frag',
+    (shader) => {
+      // Success callback - shader is ready
+      blurShader = shader;
+      isResizing = false;
+      console.log('✓ Shader reloaded after resize');
+    },
+    (err) => {
+      // Error callback - shader failed to load
+      console.warn('⚠ Failed to reload shader after resize:', err);
+      blurShader = null;
+      isResizing = false;
+    }
+  );
   
   // Reposition all other users' prisms based on normalized coordinates
   if (oldWidth > 0 && oldHeight > 0) {

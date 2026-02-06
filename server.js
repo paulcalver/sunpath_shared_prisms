@@ -17,7 +17,9 @@ let allUsers = {};
 const EXPIRY_TIME = 14 * 24 * 60 * 60 * 1000; // 14 days
 const CLEANUP_INTERVAL = 60 * 1000; // 60 seconds
 const SAVE_INTERVAL = 5 * 60 * 1000; // Save every 5 minutes
-const DATA_FILE = path.join(process.cwd(), 'prisms-data.json');
+const DATA_FILE = process.env.DATA_PATH
+  ? path.join(process.env.DATA_PATH, 'prisms-data.json')
+  : path.join(process.cwd(), 'prisms-data.json');
 
 // Load data from file on startup
 function loadData() {

@@ -814,7 +814,7 @@ function initSocket() {
 
   // Receive initial state of all users' prisms
   socket.on('init-state', (allUsers) => {
-    console.log('Received init state:', allUsers);
+    // console.log('Received init state:', allUsers);
     
     // Convert server data to Prism objects
     for (let userId in allUsers) {
@@ -864,7 +864,7 @@ function initSocket() {
 
   // Another user's prism was updated
   socket.on('prism-updated', (data) => {
-    console.log('Prism updated:', data);
+    // console.log('Prism updated:', data);
     
     if (!allUserPrisms[data.userId]) {
       allUserPrisms[data.userId] = {
@@ -903,7 +903,7 @@ function initSocket() {
 
   // User's location changed
   socket.on('location-updated', (data) => {
-    console.log('Location updated for user:', data.userId, 'to index:', data.locationIndex);
+    // console.log('Location updated for user:', data.userId, 'to index:', data.locationIndex);
     if (allUserPrisms[data.userId]) {
       allUserPrisms[data.userId].locationIndex = data.locationIndex;
     }
@@ -911,7 +911,7 @@ function initSocket() {
 
   // User's prisms expired due to inactivity
   socket.on('user-expired', (userId) => {
-    console.log('User prisms expired:', userId);
+    // console.log('User prisms expired:', userId);
     if (allUserPrisms[userId]) {
       cleanupUserLabels(userId);
       delete allUserPrisms[userId];
@@ -920,7 +920,7 @@ function initSocket() {
 
   // User disconnected
   socket.on('user-disconnected', (userId) => {
-    console.log('User disconnected:', userId);
+    // console.log('User disconnected:', userId);
     // Keep their prisms visible (persistent)
   });
 }

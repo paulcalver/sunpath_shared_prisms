@@ -120,13 +120,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+    // console.log('User disconnected:', socket.id);
     socket.broadcast.emit('user-disconnected', socket.id);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  // console.log(`Server running on port ${PORT}`);
   console.log(`Prisms will expire after ${EXPIRY_TIME / 1000 / 60} minutes of inactivity`);
 });

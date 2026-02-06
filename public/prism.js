@@ -104,7 +104,7 @@ class Prism {
     calculateRefraction(sunAngle) {
         let faceIndex = this.getHitFace(sunAngle);
         if (faceIndex === -1) {
-            console.log('No face hit');
+            // console.log('No face hit');
             return null;
         }
 
@@ -121,13 +121,13 @@ class Prism {
         );
 
         if (!entryPoint) {
-            console.log('No entry point found');
+            // console.log('No entry point found');
             return null;
         }
 
         // Rest of the method stays the same...
         let i1 = this.normalizeAngle(sunAngle - entryFace.angle);
-        console.log('Entry angle i1:', i1.toFixed(1));
+        // console.log('Entry angle i1:', i1.toFixed(1));
         let results = [];
 
         for (let ray of this.spectrum) {
@@ -136,7 +136,7 @@ class Prism {
             // Check for total internal reflection at entry
             let sinValue = sin(i1) / n;
             if (abs(sinValue) > 1) {
-                console.log('TIR at entry for', ray.name, 'sinValue:', sinValue);
+                // console.log('TIR at entry for', ray.name, 'sinValue:', sinValue);
                 continue;
             }
 
@@ -164,14 +164,14 @@ class Prism {
             }
 
             if (!exitPoint) {
-                console.log('No exit point for', ray.name);
+                // console.log('No exit point for', ray.name);
                 continue;
             }
 
             let i2 = this.normalizeAngle(internalRayAngle - exitFace.angle);
             let sinI2 = n * sin(i2);
             if (abs(sinI2) > 1) {
-                console.log('TIR at exit for', ray.name);
+                // console.log('TIR at exit for', ray.name);
                 continue;
             }
             let exitAngleLocal = asin(sinI2);
@@ -185,7 +185,7 @@ class Prism {
             });
         }
 
-        console.log('Results count:', results.length);
+        // console.log('Results count:', results.length);
         return results;
     }
 

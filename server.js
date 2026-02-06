@@ -12,7 +12,7 @@ app.use(express.static('public'));
 // Store all users' prisms with timestamps and locations
 const allUsers = {};
 
-const EXPIRY_TIME = 2 * 24 * 60 * 60 * 1000; // 48 hours
+const EXPIRY_TIME = 7 * 24 * 60 * 60 * 1000; // 7 days
 const CLEANUP_INTERVAL = 60 * 1000; // 60 seconds
 
 function cleanupExpiredPrisms() {

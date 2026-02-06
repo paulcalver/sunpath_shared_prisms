@@ -33,19 +33,6 @@ let modalJustClosed = false; // Flag to prevent modal from reopening immediately
 // UI state
 let showLabels = true; // Toggle for showing/hiding prism labels
 
-// Define locations array
-const locations = [
-  { id: 'london', name: 'London, UK', lat: 51.5074, lon: -0.1278, enabled: true, keyNumber: 1 },
-  { id: 'marrakesh', name: 'Marrakesh, Morocco', lat: 31.6295, lon: -7.9811, enabled: true, keyNumber: 2 },
-  { id: 'newyork', name: 'New York', lat: 40.7128, lon: -74.0060, enabled: true, keyNumber: 3 },
-  { id: 'lisbon', name: 'Lisbon', lat: 38.7223, lon: -9.1393, enabled: true, keyNumber: 4 },
-  { id: 'cairo', name: 'Cairo', lat: 30.0444, lon: 31.2357, enabled: true, keyNumber: 5 },
-  { id: 'dubai', name: 'Dubai', lat: 25.2048, lon: 55.2708, enabled: true, keyNumber: 6 },
-  { id: 'delhi', name: 'Delhi', lat: 28.6139, lon: 77.2090, enabled: true, keyNumber: 7 },
-  { id: 'dhaka', name: 'Dhaka', lat: 23.8103, lon: 90.4125, enabled: true, keyNumber: 8 },
-  { id: 'hanoi', name: 'Hanoi', lat: 21.0285, lon: 105.8542, enabled: true, keyNumber: 9 }
-];
-
 // Return current animated time
 function getAnimatedTime() {
   const now = new Date();
@@ -114,7 +101,7 @@ function setup() {
   timeDisplay.style('position', 'fixed');
   timeDisplay.style('bottom', '35px');
   timeDisplay.style('left', '30px');
-  timeDisplay.style('color', '#464646');
+  timeDisplay.style('color', '#ffffff');
   timeDisplay.style('font-family', 'monospace');
   timeDisplay.style('font-size', '12px');
   timeDisplay.style('z-index', '1000');

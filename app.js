@@ -1,18 +1,19 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
+import express from "express";
+import http from "http";
+import { Server } from "socket.io";
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const port = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
 // Store all users' prisms with timestamps and locations
 const allUsers = {};
 
-const EXPIRY_TIME = 60 * 60 * 1000; // 60 minutes
-const CLEANUP_INTERVAL = 30 * 1000; // 30 seconds
+const EXPIRY_TIME = 2 * 24 * 60 * 60 * 1000; // 48 hours
+const CLEANUP_INTERVAL = 60 * 1000; // 60 seconds
 
 function cleanupExpiredPrisms() {
   const now = Date.now();

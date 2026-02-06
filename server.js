@@ -14,7 +14,7 @@ app.use(express.static('public'));
 // Store all users' prisms with timestamps and locations
 let allUsers = {};
 
-const EXPIRY_TIME = 7 * 24 * 60 * 60 * 1000; // 7 days
+const EXPIRY_TIME = 14 * 24 * 60 * 60 * 1000; // 14 days
 const CLEANUP_INTERVAL = 60 * 1000; // 60 seconds
 const SAVE_INTERVAL = 5 * 60 * 1000; // Save every 5 minutes
 const DATA_FILE = path.join(process.cwd(), 'prisms-data.json');

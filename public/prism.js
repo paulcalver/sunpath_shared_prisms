@@ -5,7 +5,7 @@ class Prism {
         this.rotation = rotation;
         this.ownerId = ownerId;
         this.prismId = prismId;
-        this.size = 30; // radius/edge factor
+        this.size = 50; // radius/edge factor
         this.isSelected = false;
 
         this.spectrum = [
@@ -200,7 +200,7 @@ class Prism {
             stroke(0, 100, this.isSelected ? 100 : 70);
         } else {
             // White: no saturation, brighter when selected
-            stroke(0, 0, this.isSelected ? 100 : 50);
+            stroke(0, 0, this.isSelected ? 100 : 100);
         }
 
         strokeWeight(this.isSelected ? 2 : 1);

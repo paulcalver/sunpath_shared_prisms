@@ -2,8 +2,11 @@
 const MAX_PRISMS = 8; // Maximum number of prisms per user
 
 // Shader configuration
-const BLUR_AMOUNT = 2.0; // Blur strength (1.0-4.0 recommended)
+const BLUR_AMOUNT = 3.2; // Blur strength (1.0-4.0 recommended)
 const GRAIN_AMOUNT = 0.2; // Film grain intensity (0.0-0.5 recommended)
+
+// Label configuration
+const LABEL_OFFSET = 40; // Distance between prism and label in pixels
 
 let currentElevation;
 let currentAzimuth;
@@ -98,7 +101,7 @@ function updatePrismLabel(userId, prismId, prism) {
   const canvasElement = document.querySelector('canvas');
   const rect = canvasElement.getBoundingClientRect();
   labelElements[key].style('left', `${rect.left + prism.x}px`);
-  labelElements[key].style('top', `${rect.top + prism.y + prism.size}px`);
+  labelElements[key].style('top', `${rect.top + prism.y + LABEL_OFFSET}px`);
   labelElements[key].style('transform', 'translateX(-50%)');
 
   // Show/hide based on showLabels flag

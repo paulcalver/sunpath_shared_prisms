@@ -42,6 +42,8 @@ let modalJustClosed = false; // Flag to prevent modal from reopening immediately
 // UI state
 let showLabels = true; // Toggle for showing/hiding prism labels
 let labelElements = {}; // Store DOM elements for labels: { "userId-prismId": element }
+let showUI = true; // Toggle for showing/hiding bottom UI controls
+let controlsDiv; // Reference to controls div for toggling visibility
 
 // Return current animated time
 function getAnimatedTime() {
@@ -347,6 +349,16 @@ function mouseDragged() {
 }
 
 function keyPressed() {
+  // Toggle UI controls with 'h' key
+  if (key === 'h' || key === 'H') {
+    showUI = !showUI;
+    if (controlsDiv) {
+      controlsDiv.style('display', showUI ? 'flex' : 'none');
+    }
+    return false; // Prevent default behavior
+  }
+
+  // Delete selected prism with DELETE or BACKSPACE
   if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     if (keyCode === DELETE || keyCode === BACKSPACE) {
       emitPrismDelete(selectedPrismIndex);
@@ -685,7 +697,7 @@ function createPrismFromModal() {
 
 function createTimeControls() {
   // Container for controls - horizontal layout at bottom
-  const controlsDiv = createDiv('');
+  controlsDiv = createDiv(''); // Use global variable
   controlsDiv.style('position', 'fixed');
   controlsDiv.style('bottom', '5px');
   controlsDiv.style('left', '30px');

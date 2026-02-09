@@ -5,7 +5,7 @@ class Prism {
         this.rotation = rotation;
         this.ownerId = ownerId;
         this.prismId = prismId;
-        this.size = 40; // radius/edge factor
+        this.size = 30; // radius/edge factor
         this.isSelected = false;
 
         this.spectrum = [
@@ -260,7 +260,7 @@ class Prism {
             let y2 = beamY + sin(perpAngle + 180) * widthAtEnd;
 
             // Draw as filled triangle (wedge)
-            g.fill(r.hue, 80, 100, 80);
+            g.fill(r.hue, 100, 100, 30);
             g.noStroke();
             g.triangle(r.exitPt.x, r.exitPt.y, x1, y1, x2, y2);
         }

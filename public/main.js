@@ -49,6 +49,10 @@ let labelElements = {}; // Store DOM elements for labels: { "userId-prismId": el
 let showUI = true; // Toggle for showing/hiding bottom UI controls
 let controlsDiv; // Reference to controls div for toggling visibility
 
+// Move-any mode: allows moving any prism (including other users')
+let moveAnyMode = false;
+let selectedForeignPrism = null; // { userId, prismIndex } when a foreign prism is selected
+
 // Return current animated time
 function getAnimatedTime() {
   const now = new Date();
@@ -386,6 +390,22 @@ function windowResized() {
   }
 }
 
+function deselectAll() {
+  // Deselect own prism
+  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
+    myPrisms[selectedPrismIndex].isSelected = false;
+    selectedPrismIndex = null;
+  }
+  // Deselect foreign prism
+  if (selectedForeignPrism) {
+    const fp = selectedForeignPrism;
+    if (allUserPrisms[fp.userId] && allUserPrisms[fp.userId].prisms[fp.prismIndex]) {
+      allUserPrisms[fp.userId].prisms[fp.prismIndex].isSelected = false;
+    }
+    selectedForeignPrism = null;
+  }
+}
+
 function mousePressed() {
   // Ignore clicks if modal was just closed
   if (modalJustClosed) {
@@ -402,34 +422,54 @@ function mousePressed() {
     return;
   }
 
-  // Check if clicking on any existing prism
+  // Check if clicking on any of my own prisms
   for (let i = 0; i < MAX_PRISMS; i++) {
     if (myPrisms[i] && myPrisms[i].containsPoint(mouseX, mouseY)) {
-      // Deselect previously selected prism
-      if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
-        myPrisms[selectedPrismIndex].isSelected = false;
-      }
-      // Select this prism
+      deselectAll();
       selectedPrismIndex = i;
       myPrisms[i].isSelected = true;
       return;
     }
   }
 
-  // Click on empty space - deselect all
-  if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
-    myPrisms[selectedPrismIndex].isSelected = false;
-    selectedPrismIndex = null;
+  // In move-any mode, also check other users' prisms
+  if (moveAnyMode) {
+    for (let userId in allUserPrisms) {
+      const prisms = allUserPrisms[userId].prisms;
+      for (let i = 0; i < prisms.length; i++) {
+        if (prisms[i] && prisms[i].containsPoint(mouseX, mouseY)) {
+          deselectAll();
+          selectedForeignPrism = { userId, prismIndex: i };
+          prisms[i].isSelected = true;
+          return;
+        }
+      }
+    }
   }
+
+  // Click on empty space - deselect all
+  deselectAll();
 }
 
 function mouseDragged() {
+  // Drag own prism
   if (selectedPrismIndex !== null && myPrisms[selectedPrismIndex]) {
     myPrisms[selectedPrismIndex].x = mouseX;
     myPrisms[selectedPrismIndex].y = mouseY;
-    
-    // Emit to server
     emitPrismUpdate(selectedPrismIndex);
+    return;
+  }
+
+  // Drag foreign prism in move-any mode
+  if (moveAnyMode && selectedForeignPrism) {
+    const fp = selectedForeignPrism;
+    if (allUserPrisms[fp.userId] && allUserPrisms[fp.userId].prisms[fp.prismIndex]) {
+      const prism = allUserPrisms[fp.userId].prisms[fp.prismIndex];
+      prism.x = mouseX;
+      prism.y = mouseY;
+      // Emit move to server
+      emitForeignPrismMove(fp.userId, fp.prismIndex, prism);
+    }
   }
 }
 
@@ -441,6 +481,20 @@ function keyPressed() {
       controlsDiv.style('display', showUI ? 'flex' : 'none');
     }
     return false; // Prevent default behavior
+  }
+
+  // Toggle move-any mode with '\' key
+  if (key === '\\') {
+    moveAnyMode = !moveAnyMode;
+    // Deselect any foreign prism when exiting move-any mode
+    if (!moveAnyMode && selectedForeignPrism) {
+      const fp = selectedForeignPrism;
+      if (allUserPrisms[fp.userId] && allUserPrisms[fp.userId].prisms[fp.prismIndex]) {
+        allUserPrisms[fp.userId].prisms[fp.prismIndex].isSelected = false;
+      }
+      selectedForeignPrism = null;
+    }
+    return false;
   }
 
   // Delete selected prism with DELETE or BACKSPACE
@@ -1032,6 +1086,18 @@ function emitPrismUpdate(prismIndex) {
     cityLon: prism.cityLon || 0,
     userName: prism.userName || '',
     locationIndex: myLocation
+  });
+}
+
+// Emit foreign prism move to server (move-any mode)
+function emitForeignPrismMove(targetUserId, prismIndex, prism) {
+  if (!socket) return;
+
+  socket.emit('move-any-prism', {
+    targetUserId: targetUserId,
+    prismId: prismIndex,
+    x: prism.x / windowWidth,
+    y: prism.y / windowHeight
   });
 }
 

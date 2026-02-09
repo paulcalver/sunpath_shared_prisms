@@ -178,6 +178,36 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle moving another user's prism (move-any mode)
+  socket.on('move-any-prism', (data) => {
+    const targetUser = allUsers[data.targetUserId];
+    if (targetUser) {
+      const prismIndex = data.prismId;
+      const MAX_PRISMS = 8;
+
+      if (prismIndex >= 0 && prismIndex < MAX_PRISMS && targetUser.prisms[prismIndex]) {
+        // Update position only (keep all other properties)
+        targetUser.prisms[prismIndex].x = data.x;
+        targetUser.prisms[prismIndex].y = data.y;
+        targetUser.lastUpdate = Date.now();
+
+        // Broadcast to all other clients (including the target user)
+        socket.broadcast.emit('prism-updated', {
+          userId: data.targetUserId,
+          prismId: prismIndex,
+          x: data.x,
+          y: data.y,
+          rotation: targetUser.prisms[prismIndex].rotation,
+          cityName: targetUser.prisms[prismIndex].cityName || '',
+          cityLat: targetUser.prisms[prismIndex].cityLat || 0,
+          cityLon: targetUser.prisms[prismIndex].cityLon || 0,
+          userName: targetUser.prisms[prismIndex].userName || '',
+          locationIndex: targetUser.locationIndex
+        });
+      }
+    }
+  });
+
   socket.on('disconnect', () => {
     // console.log('User disconnected:', socket.id);
     socket.broadcast.emit('user-disconnected', socket.id);

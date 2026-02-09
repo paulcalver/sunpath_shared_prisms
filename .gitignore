@@ -1,4 +1,6 @@
 .vscode/
+media/
+.DS_Store
 
 # Logs
 logs

@@ -1,3 +1,9 @@
+// Global Prisms — Main Sketch
+// p5.js sketch managing the canvas, rendering pipeline, sun position calculations,
+// user interaction, Socket.IO client, and DOM controls.
+//
+// Author: Paul Calver <pcalv001@gold.ac.uk>
+
 // Configuration
 const MAX_PRISMS = 8; // Maximum number of prisms per user
 
@@ -514,27 +520,41 @@ function keyPressed() {
 }
 
 
+// Returns the sun's { azimuth, elevation } in degrees for a given lat/lon and Date.
+// Uses a low-precision solar position algorithm (accurate to ~1°):
+//   1. Convert date to Julian Day (JD) and days since J2000.0 (n)
+//   2. Compute mean longitude (L) and mean anomaly (g)
+//   3. Compute ecliptic longitude (lambda) using the equation of centre
+//   4. Convert ecliptic → equatorial coordinates (right ascension RA, declination delta)
+//      using the obliquity of the ecliptic (epsilon ~23.4°)
+//   5. Compute Greenwich Mean Sidereal Time (GMST) → Local Sidereal Time (LST)
+//   6. Hour angle H = LST - RA, then transform to altitude/azimuth for the observer's latitude
 function getSunPosition(lat, lon, date) {
   const rad = Math.PI / 180;
   const deg = 180 / Math.PI;
 
   const time = date.getTime();
-  const JD = (time / 86400000) + 2440587.5;
-  const n = JD - 2451545.0;
+  const JD = (time / 86400000) + 2440587.5;   // Julian Day
+  const n = JD - 2451545.0;                    // Days since J2000.0
 
+  // Mean longitude and mean anomaly (degrees)
   let L = (280.460 + 0.9856474 * n) % 360;
   let g = (357.528 + 0.9856003 * n) % 360;
+
+  // Ecliptic longitude (equation of centre correction)
   const lambda = (L + 1.915 * Math.sin(g * rad) + 0.020 * Math.sin(2 * g * rad)) % 360;
+
+  // Obliquity of the ecliptic
   const epsilon = 23.439 - 0.0000004 * n;
 
+  // Right ascension and declination (equatorial coordinates)
   let RA = deg * Math.atan2(Math.cos(epsilon * rad) * Math.sin(lambda * rad), Math.cos(lambda * rad));
   RA = (RA + 360) % 360;
-
   const delta = deg * Math.asin(Math.sin(epsilon * rad) * Math.sin(lambda * rad));
 
+  // Local hour angle H (positive = west of meridian)
   const GMST = (280.460 + 360.9856474 * n) % 360;
   const LST = (GMST + lon) % 360;
-
   let H = (LST - RA + 360) % 360;
   if (H > 180) H = H - 360;
 
@@ -542,11 +562,13 @@ function getSunPosition(lat, lon, date) {
   const HRad = H * rad;
   const deltaRad = delta * rad;
 
+  // Altitude (elevation) above the horizon
   const elevation = deg * Math.asin(
     Math.sin(latRad) * Math.sin(deltaRad) +
     Math.cos(latRad) * Math.cos(deltaRad) * Math.cos(HRad)
   );
 
+  // Azimuth measured clockwise from north
   let azimuth = deg * Math.atan2(
     -Math.sin(HRad),
     Math.cos(latRad) * Math.tan(deltaRad) - Math.sin(latRad) * Math.cos(HRad)

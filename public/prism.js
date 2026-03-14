@@ -1,3 +1,8 @@
+// Global Prisms — Prism Class
+// Handles geometry, Snell's law refraction, and rendering for a single triangular prism.
+//
+// Author: Paul Calver <pcalv001@gold.ac.uk>
+
 class Prism {
     constructor(x, y, rotation, ownerId, prismId) {
         this.x = x;
@@ -27,6 +32,8 @@ class Prism {
         return ang;
     }
 
+    // Returns the 3 corner vertices of the equilateral triangle,
+    // evenly spaced 120° apart from the prism's rotation angle.
     getVertices() {
         const vertices = [];
         for (let i = 0; i < 3; i++) {
@@ -38,6 +45,8 @@ class Prism {
         return vertices;
     }
 
+    // Returns the outward-facing normal for each of the 3 edges.
+    // Each normal points from the prism centre toward the edge midpoint.
     getFaceNormals() {
         const vertices = this.getVertices();
         const normals = [];
@@ -48,7 +57,7 @@ class Prism {
             const midpoint = p5.Vector.add(v1, v2).div(2);
             let normalVec = p5.Vector.sub(midpoint, center).normalize();
             normals.push({
-                angle: normalVec.heading(), // Angle of the normal in p5 world space
+                angle: normalVec.heading(), // angle of the normal in p5 world space
                 edgeStart: v1,
                 edgeEnd: v2
             });
@@ -56,13 +65,15 @@ class Prism {
         return normals;
     }
 
+    // Returns the index of the face that the incoming sunlight hits first.
+    // A face is a candidate only if its normal is within 90° of the sun direction
+    // (i.e. the face is angled toward the light source).
     getHitFace(sunAngle) {
         const normals = this.getFaceNormals();
         let bestFace = -1;
         let minDiff = 180;
-        // Check the angle FROM the light source TO the prism (sunAngle)
         for (let i = 0; i < normals.length; i++) {
-            // Difference between Sun's direction and where the face is pointing
+            // Angular difference between sun direction and face normal
             let diff = abs(this.normalizeAngle(sunAngle - normals[i].angle));
             if (diff < 90 && diff < minDiff) {
                 minDiff = diff;
@@ -100,49 +111,49 @@ class Prism {
     }
 
 
-    // New method using geometric intersection tracing
+    // Traces refracted rays through the prism for each wavelength in the spectrum.
+    // Returns an array of ray results (entry point, exit point, exit angle, hue),
+    // or null if the sun isn't hitting any face.
+    //
+    // Pipeline per wavelength:
+    //   1. Find which face the light enters and locate the entry point
+    //   2. Apply Snell's law at entry: sin(i1) / n → refracted angle inside glass
+    //   3. Trace the internal ray to an exit face
+    //   4. Apply Snell's law at exit: n * sin(i2) → outgoing angle
+    //   5. Skip wavelengths that undergo total internal reflection (|sin| > 1)
     calculateRefraction(sunAngle) {
         let faceIndex = this.getHitFace(sunAngle);
-        if (faceIndex === -1) {
-            // console.log('No face hit');
-            return null;
-        }
+        if (faceIndex === -1) return null;
 
         const normals = this.getFaceNormals();
         const entryFace = normals[faceIndex];
 
-        // --- 1. Find the exact entry point (parallel ray from sun hitting this face) ---
-        // We shoot a ray BACKWARDS from prism centre to find where it hits the entry face
+        // Shoot a ray backwards from the prism centre to find where it intersects
+        // the entry face — this gives us the actual entry point on the surface.
         const entryPoint = this.findParallelRayIntersection(
-            sunAngle + 180, // Shoot backwards to find entry
+            sunAngle + 180,
             createVector(this.x, this.y),
             entryFace.edgeStart,
             entryFace.edgeEnd
         );
 
-        if (!entryPoint) {
-            // console.log('No entry point found');
-            return null;
-        }
+        if (!entryPoint) return null;
 
-        // Rest of the method stays the same...
+        // Angle of incidence at the entry face (relative to face normal)
         let i1 = this.normalizeAngle(sunAngle - entryFace.angle);
-        // console.log('Entry angle i1:', i1.toFixed(1));
         let results = [];
 
         for (let ray of this.spectrum) {
-            let n = ray.n;
+            let n = ray.n; // refractive index for this wavelength
 
-            // Check for total internal reflection at entry
+            // Snell's law at entry: n_air * sin(i1) = n_glass * sin(r1)
             let sinValue = sin(i1) / n;
-            if (abs(sinValue) > 1) {
-                // console.log('TIR at entry for', ray.name, 'sinValue:', sinValue);
-                continue;
-            }
+            if (abs(sinValue) > 1) continue; // total internal reflection — skip
 
             let r1 = asin(sinValue);
             let internalRayAngle = this.normalizeAngle(entryFace.angle + r1);
 
+            // Find which of the other two faces the internal ray exits through
             let exitPoint = null;
             let exitFace = null;
 
@@ -163,17 +174,13 @@ class Prism {
                 }
             }
 
-            if (!exitPoint) {
-                // console.log('No exit point for', ray.name);
-                continue;
-            }
+            if (!exitPoint) continue;
 
+            // Snell's law at exit: n_glass * sin(i2) = n_air * sin(r2)
             let i2 = this.normalizeAngle(internalRayAngle - exitFace.angle);
             let sinI2 = n * sin(i2);
-            if (abs(sinI2) > 1) {
-                // console.log('TIR at exit for', ray.name);
-                continue;
-            }
+            if (abs(sinI2) > 1) continue; // total internal reflection at exit — skip
+
             let exitAngleLocal = asin(sinI2);
             let exitWorldAngle = this.normalizeAngle(exitFace.angle + exitAngleLocal);
 
@@ -185,7 +192,6 @@ class Prism {
             });
         }
 
-        // console.log('Results count:', results.length);
         return results;
     }
 
@@ -209,18 +215,22 @@ class Prism {
         endShape(CLOSE);
     }
 
-    // Updated draw method needs sunSource coordinates
-    // graphicsBuffer: optional p5.Graphics object to draw rays to (for shader effects)
+    // Draws the refracted light rays for this prism.
+    // Each wavelength gets two segments:
+    //   - A faint line inside the glass (entry → exit point)
+    //   - An expanding wedge triangle outside (exit point → far end), tapering
+    //     wider with distance to simulate beam spread.
+    // Ray length is mapped from sun elevation: grazing light (low elevation) = long
+    // rays that sweep across the canvas; overhead light (high elevation) = short rays.
+    // graphicsBuffer: p5.Graphics to draw into (used for the shader post-process pass).
     drawRays(sunAngle, sunElevation, graphicsBuffer) {
         let rays = this.calculateRefraction(sunAngle);
         if (!rays) return;
 
-        // Calculate ray length based on elevation
         const maxRayLength = max(width, height) * 2;
         const minRayLength = 100;
 
         let rayLength;
-
         if (sunElevation < 0.5) {
             rayLength = maxRayLength;
         } else if (sunElevation > 80) {
@@ -229,7 +239,6 @@ class Prism {
             rayLength = map(sunElevation, 0.5, 80, maxRayLength, minRayLength);
         }
 
-        // Choose which context to draw to
         const g = graphicsBuffer || window;
 
         g.push();
@@ -239,27 +248,25 @@ class Prism {
         for (let r of rays) {
             g.strokeWeight(2);
 
-            // Draw Internal Path
+            // Internal path through the glass
             g.stroke(r.hue, 50, 100, 50);
             g.line(r.entryPt.x, r.entryPt.y, r.exitPt.x, r.exitPt.y);
 
-            // Draw Emerging Path as expanding wedge
+            // Tip of the outgoing beam
             let beamX = r.exitPt.x + cos(r.angle) * rayLength;
             let beamY = r.exitPt.y + sin(r.angle) * rayLength;
 
-            // Calculate width at the far end (proportional to ray length)
+            // Beam width grows with distance (1.5% of ray length at the far end)
             let widthAtEnd = rayLength * 0.015;
-
-            // Perpendicular angle for width
             let perpAngle = r.angle + 90;
 
-            // Two edge points at the far end
+            // Far-end edge points, offset perpendicular to the ray direction
             let x1 = beamX + cos(perpAngle) * widthAtEnd;
             let y1 = beamY + sin(perpAngle) * widthAtEnd;
             let x2 = beamX + cos(perpAngle + 180) * widthAtEnd;
             let y2 = beamY + sin(perpAngle + 180) * widthAtEnd;
 
-            // Draw as filled triangle (wedge)
+            // Filled wedge triangle: apex at exit point, base at far end
             g.fill(r.hue, 100, 100, 30);
             g.noStroke();
             g.triangle(r.exitPt.x, r.exitPt.y, x1, y1, x2, y2);
@@ -267,6 +274,9 @@ class Prism {
         g.pop();
     }
 
+    // Point-in-triangle test using the cross product winding method.
+    // For each edge, the cross product with the point tells which side it's on.
+    // If all three are the same sign, the point is inside.
     containsPoint(px, py) {
         const vertices = this.getVertices();
         let sign = null;
@@ -280,7 +290,6 @@ class Prism {
         return true;
     }
 
-    // Add this method to the Prism class
     update(x, y, rotation) {
         this.x = x;
         this.y = y;

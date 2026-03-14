@@ -1,3 +1,9 @@
+// Global Prisms — Server
+// Express + Socket.IO server handling real-time multi-user prism state,
+// persistent JSON storage, and graceful shutdown.
+//
+// Author: Paul Calver <pcalv001@gold.ac.uk>
+
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -14,8 +20,6 @@ app.use(express.static('public'));
 // Store all users' prisms with timestamps and locations
 let allUsers = {};
 
-const EXPIRY_TIME = 14 * 24 * 60 * 60 * 1000; // 14 days
-const CLEANUP_INTERVAL = 60 * 1000; // 60 seconds
 const SAVE_INTERVAL = 5 * 60 * 1000; // Save every 5 minutes
 const DATA_FILE = process.env.DATA_PATH
   ? path.join(process.env.DATA_PATH, 'prisms-data.json')
@@ -68,29 +72,6 @@ function saveData() {
 // Load existing data on startup
 allUsers = loadData();
 
-function cleanupExpiredPrisms() {
-  const now = Date.now();
-  let usersToRemove = [];
-  
-  for (let userId in allUsers) {
-    if (now - allUsers[userId].lastUpdate > EXPIRY_TIME) {
-      console.log('Expiring prisms for user:', userId);
-      usersToRemove.push(userId);
-    }
-  }
-  
-  for (let userId of usersToRemove) {
-    delete allUsers[userId];
-    io.emit('user-expired', userId);
-  }
-  
-  // Save after cleanup if any users were removed
-  if (usersToRemove.length > 0) {
-    saveData();
-  }
-}
-
-setInterval(cleanupExpiredPrisms, CLEANUP_INTERVAL);
 setInterval(saveData, SAVE_INTERVAL);
 
 io.on('connection', (socket) => {
@@ -211,7 +192,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     // console.log('User disconnected:', socket.id);
     socket.broadcast.emit('user-disconnected', socket.id);
-    // Note: We keep the user data for 7 days even after disconnect
+    // Note: User data is kept permanently after disconnect
   });
 });
 
@@ -237,6 +218,5 @@ process.on('SIGINT', () => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Prisms will expire after ${EXPIRY_TIME / 1000 / 60 / 60 / 24} days of inactivity`);
   console.log(`Data will be saved every ${SAVE_INTERVAL / 1000 / 60} minutes`);
 });
